@@ -31,7 +31,7 @@ export default function PanelLayout() {
                 <Avatar><AvatarFallback><Gauge className="size-4" /></AvatarFallback></Avatar>
               </ItemMedia>
               <ItemContent className="min-w-0">
-                <ItemTitle>cnb-widget</ItemTitle>
+                <ItemTitle>CNB Widget</ItemTitle>
                 <ItemDescription>CNB 桌面工作台</ItemDescription>
               </ItemContent>
             </Item>

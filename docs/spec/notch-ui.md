@@ -48,7 +48,7 @@ idle/peek 之上可叠加 event 横幅（6s 自动收回）
 - **口径（定稿）**：单选组织 × 单选维度 —— settings `usageMetric`（credit / git-storage / object-storage / ci-corehour / dev-corehour / dev-gpu-corehour）× `usageOrg`（主面板指定单个组织）；
   - 所选组织 charge 403 或数据缺失 → 显示 `--`（气泡面板内提示无权限）；
   - 刘海 idle 左胶囊与悬浮球**共用同一口径配置**，行为一致；
-- 拖动交互保持现状（`float_nudge` / `float_settle`，位移阈值区分点击）。
+- 拖动交互使用 `float_nudge` / `float_settle`；超过位移阈值后移动窗口，低于阈值仍视为点击，位移请求按帧合并。
 
 ### 3.2 气泡详细面板（Bubble，定稿）
 
