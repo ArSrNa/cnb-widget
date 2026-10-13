@@ -1,0 +1,65 @@
+# CNB Island 流水线
+# 节点：amd64（上限 64 核）；环境：.ide/Dockerfile 动态构建（基础镜像 rust，含 Node.js + bun），
+# 镜像版本哈希不变时直接复用制品库缓存
+# 说明：macOS .app/.dmg 产物无法在 Linux 云端构建，接入自托管 Mac Runner 后再扩展打包阶段
+
+.ci-runner: &ci-runner
+  tags: cnb:arch:amd64
+  cpus: 64
+
+.ci-docker: &ci-docker
+  build: .ide/Dockerfile
+  volumes:
+    - /root/.bun:copy-on-write              # bun 依赖缓存
+    - /usr/local/cargo:copy-on-write        # cargo registry 缓存
+
+.ci-stages: &ci-stages
+  - name: 前端依赖安装
+    script: bun install --frozen-lockfile
+  - name: 前端构建
+    script: bun run build
+  - name: Rust 格式检查
+    script: cargo fmt --all -- --check
+  - name: Rust 静态检查
+    script: cargo clippy --all-targets -- -D warnings
+  - name: Rust 单元测试
+    script: cargo test --workspace
+
+main:
+  push:
+    - name: build-and-check
+      runner: *ci-runner
+      docker: *ci-docker
+      stages: *ci-stages
+  pull_request:
+    - name: build-and-check
+      runner: *ci-runner
+      docker: *ci-docker
+      stages: *ci-stages
+
+v*: # 打 tag（如 v0.1.0）触发发布构建
+  tag_push:
+    - name: release-build
+      runner: *ci-runner
+      docker: *ci-docker
+      stages:
+        - name: 前端依赖安装
+          script: bun install --frozen-lockfile
+        - name: 前端构建
+          script: bun run build
+        - name: Rust 检查与测试
+          script: cargo clippy --all-targets -- -D warnings && cargo test --workspace
+        - name: Release 构建
+          script: bun run tauri build
+
+$: # 云原生开发环境（WebIDE / VSCode 客户端）
+  vscode:
+    - docker:
+        build: .ide/Dockerfile
+        image: docker.cnb.cool/arsrna/dev-image/rust # 构建失败时的回退镜像
+      services:
+        - vscode
+        - docker
+      stages:
+        - name: 环境自检
+          script: node -v && bun -v && rustc --version && cargo --version
