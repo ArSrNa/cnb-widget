@@ -1,0 +1,544 @@
+:root {
+  color-scheme: dark;
+  font-family: -apple-system, "SF Pro Text", "PingFang SC", system-ui, sans-serif;
+  font-size: 13px;
+  line-height: 1.45;
+  color: rgba(245, 245, 247, 0.92);
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html,
+body,
+#root {
+  width: 100%;
+  height: 100%;
+  background: transparent;
+  overflow: hidden;
+  user-select: none;
+}
+
+/* ---------- 表面容器：随形态变化的整体画布 ---------- */
+
+.surface {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  transition: none;
+}
+
+.surface.idle {
+  cursor: default;
+}
+
+.surface.peek,
+.surface.panel {
+  cursor: default;
+}
+
+/* ---------- idle：两枚胶囊，中间留出刘海空隙 ---------- */
+
+.idle-wrap {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+}
+
+.pill {
+  height: 100%;
+  background: #000;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  padding: 0 8px;
+  gap: 5px;
+  box-shadow: 0 1px 6px rgba(0, 0, 0, 0.5);
+}
+
+.pill-left {
+  width: 64px;
+  margin-left: 10px;
+  justify-content: center;
+}
+
+.pill-right {
+  width: 64px;
+  margin-right: 10px;
+  justify-content: center;
+}
+
+/* 刘海本体所在的位置：透明让位（真机 M4 由 notch-probe 精确计算） */
+.notch-gap {
+  flex: 1;
+  height: 100%;
+}
+
+.ring {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  position: relative;
+}
+
+.ring i {
+  position: absolute;
+  inset: 3px;
+  border-radius: 50%;
+  background: #000;
+  display: grid;
+  place-items: center;
+  font-style: normal;
+  font-size: 7px;
+  font-weight: 700;
+  color: #e5e7eb;
+}
+
+.dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+}
+
+.surface.idle .peek-wrap,
+.surface.idle .panel-wrap {
+  display: none;
+}
+
+/* ---------- peek：横条 ---------- */
+
+.peek-wrap {
+  position: absolute;
+  inset: 0;
+  padding: 10px 14px 12px;
+  background: rgba(8, 9, 13, 0.92);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 16px;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.45);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  animation: pop 0.16s ease;
+}
+
+.peek-orgs {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex: 1;
+}
+
+.peek-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.peek-name {
+  width: 76px;
+  font-size: 12px;
+  color: rgba(245, 245, 247, 0.85);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.peek-bar {
+  flex: 1;
+  height: 6px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.1);
+  overflow: hidden;
+}
+
+.peek-bar-fill {
+  height: 100%;
+  border-radius: 999px;
+  transition: width 0.3s ease;
+}
+
+.peek-num {
+  width: 36px;
+  text-align: right;
+  font-size: 11px;
+  color: rgba(245, 245, 247, 0.6);
+  font-variant-numeric: tabular-nums;
+}
+
+.peek-counts {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 11px;
+  color: rgba(245, 245, 247, 0.7);
+}
+
+.peek-count i {
+  font-style: normal;
+  margin-right: 3px;
+}
+
+.peek-hint {
+  margin-left: auto;
+  font-size: 10px;
+  color: rgba(245, 245, 247, 0.35);
+}
+
+/* peek 全区域可点击进 panel */
+.peek-click {
+  position: absolute;
+  inset: 0;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  border-radius: 16px;
+}
+
+.surface.peek .idle-wrap,
+.surface.peek .panel-wrap {
+  display: none;
+}
+
+/* ---------- panel：完整面板 ---------- */
+
+.panel-wrap {
+  position: absolute;
+  inset: 0;
+  padding: 14px 16px;
+  background: rgba(8, 9, 13, 0.96);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 18px;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  animation: pop 0.18s ease;
+}
+
+.surface.panel .idle-wrap,
+.surface.panel .peek-wrap {
+  display: none;
+}
+
+.panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.tabs {
+  display: flex;
+  gap: 6px;
+}
+
+.tab {
+  appearance: none;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: transparent;
+  color: rgba(245, 245, 247, 0.7);
+  border-radius: 999px;
+  padding: 3px 12px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.tab.active {
+  background: rgba(129, 140, 248, 0.18);
+  border-color: rgba(129, 140, 248, 0.5);
+  color: #c7d2fe;
+}
+
+.close {
+  appearance: none;
+  border: none;
+  background: transparent;
+  color: rgba(245, 245, 247, 0.5);
+  font-size: 13px;
+  cursor: pointer;
+  padding: 2px 6px;
+}
+
+.close:hover {
+  color: #f87171;
+}
+
+.usage {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.usage-title {
+  font-size: 12px;
+  color: rgba(245, 245, 247, 0.7);
+  display: flex;
+  justify-content: space-between;
+}
+
+.usage-val {
+  font-variant-numeric: tabular-nums;
+  color: rgba(245, 245, 247, 0.9);
+}
+
+.usage-bar {
+  height: 8px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.1);
+  overflow: hidden;
+}
+
+.usage-fill {
+  height: 100%;
+  border-radius: 999px;
+  transition: width 0.3s ease;
+}
+
+.issues {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  border-top: 1px solid rgba(255, 255, 255, 0.07);
+  padding-top: 10px;
+}
+
+.issue {
+  display: grid;
+  grid-template-columns: 14px 150px 1fr auto;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  text-decoration: none;
+  color: inherit;
+}
+
+.issue:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.issue-state {
+  text-align: center;
+}
+
+.issue-repo {
+  color: rgba(245, 245, 247, 0.5);
+  font-size: 11px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.issue-title {
+  font-size: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.issue-time {
+  font-size: 11px;
+  color: rgba(245, 245, 247, 0.4);
+  white-space: nowrap;
+}
+
+.mono {
+  font-family: "SF Mono", ui-monospace, Menlo, monospace;
+}
+
+@keyframes pop {
+  from {
+    opacity: 0;
+    transform: translateY(-6px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* ---------- 面板内通用控件（设置视图等） ---------- */
+
+.ghost {
+  appearance: none;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: transparent;
+  color: rgba(245, 245, 247, 0.7);
+  border-radius: 999px;
+  padding: 2px 10px;
+  font-size: 11px;
+  cursor: pointer;
+  align-self: flex-start;
+  width: fit-content;
+}
+
+.ghost:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.ghost.back {
+  margin-bottom: -4px;
+}
+
+.setup {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  border-top: 1px solid rgba(255, 255, 255, 0.07);
+  padding-top: 10px;
+}
+
+.card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.card-head h2 {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.kv {
+  display: grid;
+  grid-template-columns: 72px 1fr;
+  row-gap: 8px;
+  column-gap: 12px;
+  align-items: baseline;
+}
+
+.kv dt {
+  color: rgba(245, 245, 247, 0.5);
+}
+
+.kv dd {
+  min-width: 0;
+}
+
+.badge {
+  display: inline-block;
+  padding: 1px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  border: 1px solid transparent;
+}
+
+.badge.managed {
+  color: #6ee7a0;
+  background: rgba(110, 231, 160, 0.1);
+  border-color: rgba(110, 231, 160, 0.3);
+}
+
+.badge.system {
+  color: #93c5fd;
+  background: rgba(147, 197, 253, 0.1);
+  border-color: rgba(147, 197, 253, 0.3);
+}
+
+.badge.missing {
+  color: #fca5a5;
+  background: rgba(252, 165, 165, 0.1);
+  border-color: rgba(252, 165, 165, 0.3);
+}
+
+.badge.ok {
+  color: #6ee7a0;
+  background: rgba(110, 231, 160, 0.1);
+  border-color: rgba(110, 231, 160, 0.3);
+}
+
+.badge.bad {
+  color: #fca5a5;
+  background: rgba(252, 165, 165, 0.1);
+  border-color: rgba(252, 165, 165, 0.3);
+}
+
+.badge.outdated {
+  margin-left: 8px;
+  color: #fcd34d;
+  background: rgba(252, 211, 77, 0.1);
+  border-color: rgba(252, 211, 77, 0.3);
+}
+
+.version {
+  margin-left: 8px;
+  color: rgba(245, 245, 247, 0.6);
+  font-size: 11px;
+}
+
+.hint {
+  margin-top: 6px;
+  color: rgba(245, 245, 247, 0.55);
+  font-size: 11px;
+}
+
+.hint code {
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.08);
+  font-family: "SF Mono", ui-monospace, Menlo, monospace;
+}
+
+.error {
+  margin-top: 8px;
+  color: #fca5a5;
+  font-size: 12px;
+}
+
+.progress {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.progress .bar {
+  flex: 1;
+  height: 6px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #38bdf8, #818cf8);
+  transition: width 0.15s ease;
+  min-width: 4px;
+}
+
+.progress span {
+  font-size: 11px;
+  color: rgba(245, 245, 247, 0.6);
+  min-width: 32px;
+  text-align: right;
+}
+
+.actions button {
+  appearance: none;
+  border: none;
+  border-radius: 8px;
+  padding: 6px 14px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #0b0d12;
+  background: linear-gradient(135deg, #38bdf8, #818cf8);
+  cursor: pointer;
+  align-self: flex-start;
+}
+
+.actions button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.result {
+  margin-top: 4px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: rgba(110, 231, 160, 0.08);
+  border: 1px solid rgba(110, 231, 160, 0.2);
+}
