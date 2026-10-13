@@ -54,7 +54,7 @@ pub const FLOAT_SIZE: (f64, f64) = (64.0, 64.0);
 
 /// 打开悬浮球旁的详情窗；完整可读组织列表在固定窗口内滚动。
 #[tauri::command]
-pub fn float_details_show(app: AppHandle, window: WebviewWindow) -> Result<(), String> {
+pub async fn float_details_show(app: AppHandle, window: WebviewWindow) -> Result<(), String> {
     if window.label() != FLOAT_LABEL {
         return Err("请从悬浮球打开详情".into());
     }
@@ -208,6 +208,7 @@ pub fn show_notch_window(app: &AppHandle) -> Result<(), String> {
         .shadow(false)
         .focused(false)
         .accept_first_mouse(true)
+        .background_throttling(tauri::utils::config::BackgroundThrottlingPolicy::Disabled)
         .build()
         .map_err(|e| format!("创建灵动岛窗口失败: {e}"))?;
 

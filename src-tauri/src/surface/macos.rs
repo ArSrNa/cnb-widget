@@ -101,10 +101,12 @@ pub fn place(window: &WebviewWindow, width: f64, height: f64) -> Result<(), Stri
         // Equal wings keep the central camera gap aligned with the window midpoint.
         let x = notch_center - width / 2.0;
         let y = screen.origin.y + screen.size.height - height;
-        native.setFrame_display(
-            NSRect::new(NSPoint::new(x, y), NSSize::new(width, height)),
-            true,
-        );
+        let frame = NSRect::new(NSPoint::new(x, y), NSSize::new(width, height));
+        if native.frame() != frame {
+            // Do not force synchronous drawing of WebKit's old backing layer.
+            // Let its resized viewport paint on the next normal display pass.
+            native.setFrame_display(frame, false);
+        }
         Ok(())
     })
 }
