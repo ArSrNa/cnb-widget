@@ -14,8 +14,8 @@ import { readableUsageOrgs, selectedUsage } from "@/lib/usage";
 
 const PREVIEW_GEOMETRY: NotchGeometry = { available: true, notchWidth: 184, menuBarHeight: 32 };
 const WING_WIDTH = 64;
-const MOTION_DURATION_MS = 400;
-const MOTION_EASING = "cubic-bezier(0.4, 0, 0.2, 1)";
+const MOTION_DURATION_MS = 200;
+const MOTION_EASING = "cubic-bezier(0.6, 0, 0.2, 1)";
 const CLOSE_DELAY_MS = 200;
 type Phase = "idle" | "peek";
 
@@ -36,7 +36,7 @@ export default function NotchApp() {
     let disposed = false;
     void invoke<NotchGeometry>("notch_geometry").then((value) => {
       if (!disposed) setGeometry(value);
-    }).catch(() => {});
+    }).catch(() => { });
     return () => { disposed = true; };
   }, []);
 
@@ -45,7 +45,7 @@ export default function NotchApp() {
     const resize = () => void invoke("surface_resize", {
       width: phase === "idle" ? idleWidth : peekWidth,
       height: geometry.menuBarHeight + (phase === "peek" ? 200 : 0),
-    }).catch(() => {});
+    }).catch(() => { });
     // Reserve transparent space before opening; keep it until the CSS collapse
     // finishes so the native window never clips the animated surface.
     if (phase === "peek" || window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
@@ -110,7 +110,7 @@ export default function NotchApp() {
           <SurfaceUsageList orgs={readableOrgs} settings={settings} />
           <div className="flex shrink-0 items-center justify-between gap-2">
             <span className="flex items-center gap-2">{NOTCH_STATUSES.map(({ key }) => <IssueBadge key={key} state={key} count={npcData.issues.filter((issue) => issue.state === key).length} />)}</span>
-            <Button size="xs" variant="secondary" onClick={() => { close(); void invoke("panel_show").catch(() => {}); }}>打开工作台</Button>
+            <Button size="xs" variant="secondary" onClick={() => { close(); void invoke("panel_show").catch(() => { }); }}>打开工作台</Button>
           </div>
         </div>
       </div>
