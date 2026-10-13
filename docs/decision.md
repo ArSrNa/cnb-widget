@@ -49,7 +49,7 @@
 1. **数据层走 cnb-cli 子进程，而非直接实现 CNB OpenAPI 客户端**（已确认，2026-10-13）
    - 复用用户已有的 `cnb login` 登录态与 token 生命周期，widget 自己不做 OAuth；
    - CLI 输出结构化 JSON（`-v`），解析稳定；
-   - 例外：charge/credit 类接口内置 token 无权限，走 **PAT + 直连 OpenAPI**（见 spec §2.2）；
+   - charge/credit 同样走 cnb-cli；Token 可在首页配置，权限受 scope 与组织角色共同限制；
    - 路线图：后续版本内置 OAuth 设备授权流，去掉 cnb-cli 安装依赖；
    - 代价：当前要求用户安装 cnb-cli —— 目标用户（CNB 重度用户）大概率已安装，检测到缺失时给下载引导。
 2. **刘海几何探测**：分级方案（2026-10-13 修订）——「刘海屏可用性」探测用 `NSScreen.safeAreaInsets`（macOS 12+，无需权限）+ `hw.model` 型号兜底，提前实施；原 CGDisplayStream 屏幕录制权限方案保留为 M4「精确贴合刘海 frame」的增强项。
@@ -59,7 +59,7 @@
 ## 4. MVP 边界
 
 - **做**：issue/NPC 工作状态面板（全功能）、组织 credit 用量（权限就绪后接入，未就绪时隐藏该维度）、收起/展开/事件提醒三种形态。
-- **不做（首版）**：NPC-observability 增强数据、多账号、Windows/Linux、点击跳转之外的深度交互（如直接在刘海回复 issue）、数据统计图表。
+- **不做（首版）**：NPC-observability 增强数据、多账号、点击跳转之外的深度交互（如直接在刘海回复 issue）、数据统计图表。
 
 详细规格见 [spec.md](./spec.md)。
 
@@ -95,3 +95,7 @@
 - 移除样式层外的全局 margin/padding 清零；基础窗口几何放进 `@layer base`，允许 Tailwind utilities 正常控制间距。
 - padding 是组件内留白的标准做法；gap 控制相邻元素间距，二者都需要。取消「组件不得调整密度 / 页面不得覆盖 padding」的硬性限制。
 - 内容区 16–24px，卡片 24px，列表行 16px，区块间 24px；所有页面使用同一布局与语义配色。
+
+## 8. 真实数据与跨平台认证（2026-10-14）
+
+首页提供个人访问令牌配置和权限说明，不要求存在 CNB_TOKEN 环境变量。使用统一凭据接口接入 macOS Keychain、Windows Credential Manager、Linux Secret Service；可明确选择会话模式。主面板与悬浮球面向三平台，灵动刘海保留 macOS 屏幕限制。组织用量及 NPC 状态读取真实 CLI 数据，OAuth 本次只记录 [产品意图](intent/auth.md)。实施细节见 [认证规格](spec/auth.md)。

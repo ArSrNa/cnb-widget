@@ -12,12 +12,16 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { listenDesktop } from "@/lib/desktop";
-import { MOCK_ISSUES, MOCK_ORGS } from "@/lib/mock";
+import { useNpc } from "@/hooks/use-npc";
 import { DEFAULT_SETTINGS, NOTCH_STATUSES, USAGE_METRICS, type AppSettings, type NotchGeometry } from "@/lib/settings";
 import { selectedUsage } from "@/lib/usage";
+import { useCnb } from "@/hooks/use-cnb";
+import { TokenSettings } from "@/components/token-settings";
 import SetupView from "@/SetupView";
 
 export default function SettingsPage() {
+  const { data } = useCnb();
+  const { data: npcData } = useNpc();
   const desktop = isTauri();
   const [settings, setSettings] = useState<AppSettings | null>(desktop ? null : DEFAULT_SETTINGS);
   const [saving, setSaving] = useState(false);
@@ -69,9 +73,9 @@ export default function SettingsPage() {
   }
 
   const disabled = !desktop || !settings || saving;
-  const usage = selectedUsage(MOCK_ORGS, settings ?? DEFAULT_SETTINGS);
+  const usage = selectedUsage(data.error ? [] : data.orgs, settings ?? DEFAULT_SETTINGS);
   const status = NOTCH_STATUSES.find((value) => value.key === settings?.notchStatus) ?? NOTCH_STATUSES[0];
-  const count = MOCK_ISSUES.filter((issue) => issue.state === status.key).length;
+  const count = !npcData.updatedAt || npcData.error || npcData.warnings.length > 0 ? null : npcData.issues.filter((issue) => issue.state === status.key).length;
   return (
     <>
       <PageHeading title="设置" description="管理桌面组件与 CNB 连接。" media={<Avatar size="lg"><AvatarFallback><Settings className="size-5" /></AvatarFallback></Avatar>} />
@@ -109,9 +113,9 @@ export default function SettingsPage() {
               <FieldLabel id="usage-org-label">用量组织</FieldLabel>
               <ToggleGroup type="single" variant="outline" spacing={2} className="flex-wrap" aria-labelledby="usage-org-label"
                 disabled={disabled} value={usage.org?.slug ?? ""} onValueChange={(value) => { if (value) void update({ usageOrg: value }); }}>
-                {MOCK_ORGS.map((org) => <ToggleGroupItem key={org.slug} value={org.slug} disabled={org.chargeForbidden}>{org.name}{org.chargeForbidden && "（无权限）"}</ToggleGroupItem>)}
+                {data.orgs.map((org) => <ToggleGroupItem key={org.slug} value={org.slug} disabled={org.chargeForbidden || !!org.error}>{org.name}{org.chargeForbidden && "（无权限）"}</ToggleGroupItem>)}
               </ToggleGroup>
-              <FieldDescription>只展示一个组织的用量百分比。</FieldDescription>
+              <FieldDescription>只展示一个可读取组织的真实用量；连接 CNB 后可选择组织。</FieldDescription>
             </Field>
             <Field data-disabled={disabled}>
               <FieldLabel id="usage-metric-label">用量类型</FieldLabel>
@@ -143,11 +147,12 @@ export default function SettingsPage() {
                 <UsageRing percent={usage.percent} label={`${usage.org?.name ?? "组织不可用"} ${usage.metric.label}`} />
                 <StatusCount count={count} label={status.label} />
               </div>
-              <FieldDescription>{usage.org?.name ?? "组织不可用"} · {usage.metric.label} · 当前为演示数据</FieldDescription>
+              <FieldDescription>{usage.org?.name ?? "组织不可用"} · {usage.metric.label} · 真实数据</FieldDescription>
             </Field>
           </FieldGroup>
         </CardContent>
       </Card>
+      <TokenSettings />
       <SetupView />
     </>
   );

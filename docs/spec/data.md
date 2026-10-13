@@ -7,7 +7,7 @@
 - **错误分类**：
   - `status: 403` / `has no permission` → `NoPermission`，UI 隐藏对应维度（指数退避至 30min，不反复重试）；
   - stderr `not found` / spawn 失败 → `NotInstalled`，展示安装引导；
-  - `cnb status` 非登录 → `NotLoggedIn`，展示「运行 cnb login」引导；
+  - 401 / `cnb status` 非登录 → `NotLoggedIn`，首页引导填写 Token 或复用 CLI 登录态；
 - **约束**：单次 15s 超时；所有调用全局串行化（tokio Mutex），避免并发触发限流。
 
 ## 2. 数据集与刷新策略
@@ -39,8 +39,8 @@
 - 百分比口径：`已用 ÷ total`；冻结额度（`freeze_dev_in_sec` / `freeze_credit_in_milli`）暂不计入分母，详细面板单独标注；
 - `get-quota` 的 `free` 为月度免费额度（已含在 total 内），面板「剩余」= total − 已用。
 
-- **监控范围**：组织白名单制（见 [../intent/data.md](../intent/data.md) §3）。
-- **缓存**：内存为主；退出时快照到 `<app_data_dir>/cache.json`，启动先渲染缓存再后台刷新。
+- **监控范围**：当前为账号与 Token 可访问资源；组织白名单制为后续配置意图（见 [../intent/data.md](../intent/data.md) §3）。
+- **缓存**：当前共享 Rust 内存快照；退出快照到 `<app_data_dir>/cache.json` 与启动先渲染磁盘缓存留待后续。
 - **成本估算**：10 仓库 × (1 issue 列表 + ~3 变更评论) ≈ 40 次/90s；credit 聚合按日缓存（当日 15s 短缓存、历史日长缓存）。
 
 ## 3. Issue 状态推导规则（核心业务逻辑）

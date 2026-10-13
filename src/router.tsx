@@ -3,13 +3,12 @@ import {
   createRootRoute,
   createRoute,
   createRouter,
-  redirect,
 } from "@tanstack/react-router";
 import PanelLayout from "@/PanelLayout";
 import NpcPage from "@/pages/npc";
 import SettingsPage from "@/pages/settings";
 import UsagePage from "@/pages/usage";
-import { MOCK_ORGS } from "@/lib/mock";
+import HomePage from "@/pages/home";
 
 const rootRoute = createRootRoute({
   component: PanelLayout,
@@ -18,12 +17,7 @@ const rootRoute = createRootRoute({
 const indexRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/",
-  beforeLoad: () => {
-    throw redirect({
-      to: "/usage/$orgSlug",
-      params: { orgSlug: MOCK_ORGS[0].slug },
-    });
-  },
+  component: HomePage,
 });
 
 const usageRoute = createRoute({

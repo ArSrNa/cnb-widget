@@ -48,7 +48,7 @@
 
 ## 4. 页面
 
-- **用量**：PageHeading 显示组织头像、名称和演示状态。Card 内每个资源维度一条 outline Item，包含已用 / 总量、Progress、真实百分比、剩余额度与告警 Badge。缺失 / 非正额度显示暂无数据；无权限组织显示 Empty。进度图限于 0–100，数值允许超过 100% 以表达超额。
+- **用量**：PageHeading 显示组织头像、名称和刷新操作。Card 内每个资源维度一条 outline Item，包含已用 / 总量、Progress、真实百分比、剩余额度与告警 Badge。字段缺失显示暂无数据，零额度保留数值并显示无可用额度；无权限组织显示 Empty。进度图限于 0–100，数值允许超过 100% 以表达超额。
 - **NPC**：PageHeading + 任务 Card；ToggleGroup 筛选五种状态和全部。每个 Item 显示状态 Badge、标题、仓库、编号和时间。Tauri 使用 opener 打开外部浏览器，浏览器预览使用正常链接；失败显示 Alert，筛选无结果显示 Empty。
 - **设置**：PageHeading + 显示 Card + CNB 连接 Card。原有 Tauri 命令和 settings-changed 事件保留；加载与保存期间禁用开关，保存失败回滚并显示错误。浏览器预览明确展示桌面功能提示。
 - **CNB 连接**：来源、路径、登录状态使用 outline Item；路径可折行和复制；刷新、安装、验证使用 Button + Spinner，下载使用 Progress，提示使用 Alert。
@@ -58,7 +58,7 @@
 - 两个窗口保持透明，全局 body 不铺背景。
 - 刘海用 shadcn Button 的 surface / notch 变体；idle 360×32，peek 520×180，展开后逐组织 Progress、NPC Badge、Separator 与工作台入口。
 - 悬浮球用 shadcn Button 的 float 尺寸变体（56px 圆形），显示 credit 汇总百分比与 Progress；窗口 64×64，保留拖动、位置持久化和点击打开主面板。
-- 当前沿用汇总 mock 口径；单组织 × 单维度设置、刘海可用性探测与气泡窗口属于后续数据/原生能力工作。
+- 当前使用真实数据的单组织 × 单维度设置，共用于刘海与悬浮球；刘海可用性探测已实现。独立气泡窗口属于后续原生能力工作。
 
 ## 6. 验收
 

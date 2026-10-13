@@ -3,7 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { Button } from "@/components/ui/button";
 import { UsageRing } from "@/components/usage-ring";
 import { useSurfaceSettings } from "@/hooks/use-surface-settings";
-import { MOCK_ORGS } from "@/lib/mock";
+import { useCnb } from "@/hooks/use-cnb";
 import { selectedUsage } from "@/lib/usage";
 
 const CLICK_THRESHOLD = 6;
@@ -12,7 +12,8 @@ export default function FloatApp() {
   const drag = useRef({ active: false, moved: 0, lastX: 0, lastY: 0 });
   const chain = useRef<Promise<unknown>>(Promise.resolve());
   const settings = useSurfaceSettings();
-  const usage = selectedUsage(MOCK_ORGS, settings);
+  const { data } = useCnb();
+  const usage = selectedUsage(data.error ? [] : data.orgs, settings);
   const label = `${usage.org?.name ?? "组织不可用"} · ${usage.metric.label}`;
 
   function endDrag(event: PointerEvent<HTMLButtonElement>) {

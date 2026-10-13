@@ -1,6 +1,6 @@
 import { CircleCheck, CircleDashed, CircleHelp, CircleX, LoaderCircle } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-import { ISSUE_STATE_META, type IssueState } from "@/lib/mock";
+import { ISSUE_STATE_META, type IssueState } from "@/lib/npc";
 
 const ICONS = {
   NPC_WORKING: LoaderCircle,

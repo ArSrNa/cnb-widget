@@ -1,16 +1,36 @@
-import type { OrgUsage, UsageQuota } from "@/lib/mock";
 import { USAGE_METRICS, type AppSettings } from "@/lib/settings";
+
+export interface UsageQuota {
+  used: number;
+  quota: number;
+  frozen?: number | null;
+}
+export interface OrgUsage {
+  slug: string;
+  name: string;
+  chargeForbidden?: boolean;
+  error?: string | null;
+  credit?: UsageQuota | null;
+  devCorehour?: UsageQuota | null;
+  ciCorehour?: UsageQuota | null;
+}
+export const USAGE_DIMENSIONS = [
+  { key: "credit", label: "credit" },
+  { key: "devCorehour", label: "云原生开发核时" },
+  { key: "ciCorehour", label: "云原生构建核时" },
+] as const;
+export type UsageDimensionKey = (typeof USAGE_DIMENSIONS)[number]["key"];
 
 export function selectedUsage(orgs: OrgUsage[], settings: AppSettings) {
   const org = settings.usageOrg === null
-    ? orgs.find((candidate) => !candidate.chargeForbidden)
+    ? orgs.find((candidate) => !candidate.chargeForbidden && !candidate.error)
     : orgs.find((candidate) => candidate.slug === settings.usageOrg);
   const metric = USAGE_METRICS.find((candidate) => candidate.key === settings.usageMetric) ?? USAGE_METRICS[0];
-  const percent = !org || org.chargeForbidden ? null : usagePercent(org[metric.dimension]);
+  const percent = !org || org.chargeForbidden || org.error ? null : usagePercent(org[metric.dimension]);
   return { org, metric, percent };
 }
 
-export function usagePercent(quota?: UsageQuota): number | null {
+export function usagePercent(quota?: UsageQuota | null): number | null {
   if (!quota || quota.quota <= 0 || !Number.isFinite(quota.used) || !Number.isFinite(quota.quota)) return null;
   return Math.max(0, Math.round((quota.used / quota.quota) * 100));
 }

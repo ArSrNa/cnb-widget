@@ -4,6 +4,7 @@ import { RouterProvider } from "@tanstack/react-router";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import NotchApp from "./NotchApp";
 import FloatApp from "./FloatApp";
+import { CnbProvider } from "./hooks/use-cnb";
 import { router } from "./router";
 import "./index.css";
 import "./App.css";
@@ -24,6 +25,7 @@ try {
 
 ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
   <React.StrictMode>
+    <CnbProvider>
     {label === "main" ? (
       <RouterProvider router={router} />
     ) : label === "float" ? (
@@ -31,5 +33,6 @@ ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
     ) : (
       <NotchApp />
     )}
+    </CnbProvider>
   </React.StrictMode>,
 );
