@@ -7,13 +7,16 @@ describe("surface usage selection", () => {
   test("shows the selected organization and metric instead of aggregating", () => {
     const result = selectedUsage(MOCK_ORGS, { ...DEFAULT_SETTINGS, usageOrg: "1024hub", usageMetric: "dev-corehour" });
     expect(result.org?.slug).toBe("1024hub");
-    expect(result.percent).toBe(96);
+    expect(result.percent).toBe(4);
+    expect(result.warning).toBe(true);
+    expect(selectedUsage(MOCK_ORGS, { ...DEFAULT_SETTINGS, usageOrg: "1024hub", usageMetric: "dev-corehour", usageDisplay: "used" }).percent).toBe(96);
   });
 
   test("defaults to the first readable organization", () => {
     const result = selectedUsage([MOCK_ORGS[3], MOCK_ORGS[0]], DEFAULT_SETTINGS);
     expect(result.org?.slug).toBe("arsrna");
-    expect(result.percent).toBe(61);
+    expect(result.percent).toBe(39);
+    expect(result.warning).toBe(false);
   });
 
   test("does not replace missing or forbidden selections with another organization", () => {

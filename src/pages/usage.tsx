@@ -1,5 +1,6 @@
 import { useParams } from "@tanstack/react-router";
 import { Link } from "@tanstack/react-router";
+import { useSurfaceSettings } from "@/hooks/use-surface-settings";
 import { useCnb } from "@/hooks/use-cnb";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
@@ -12,9 +13,11 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
 import { Item, ItemActions, ItemContent, ItemDescription, ItemGroup, ItemHeader, ItemTitle } from "@/components/ui/item";
 import { Progress } from "@/components/ui/progress";
-import { USAGE_DIMENSIONS, usagePercent } from "@/lib/usage";
+import { USAGE_DIMENSIONS, displayPercent, usagePercent } from "@/lib/usage";
 
 export default function UsagePage() {
+  const settings = useSurfaceSettings();
+  const displayLabel = settings.usageDisplay === "used" ? "已用" : "剩余";
   const { orgSlug } = useParams({ from: "/usage/$orgSlug" });
   const { data, loading, refresh } = useCnb();
   const org = data.orgs.find((o) => o.slug === orgSlug);
@@ -53,24 +56,25 @@ export default function UsagePage() {
             <ItemGroup className="gap-4">
               {USAGE_DIMENSIONS.map((dimension) => {
                 const quota = org[dimension.key];
-                const percent = usagePercent(quota);
+                const usedPercent = usagePercent(quota);
+                const percent = displayPercent(quota, settings.usageDisplay);
                 const available = quota && !org.error;
                 return (
                   <Item key={dimension.key} variant="outline">
                     <ItemHeader>
                       <ItemTitle>{dimension.label}</ItemTitle>
-                      <Badge variant={!available ? "outline" : (percent ?? 0) >= 80 ? "destructive" : "secondary"}>
-                        {!available ? "暂无数据" : quota.quota === 0 ? "无可用额度" : (percent ?? 0) >= 100 ? "已达上限" : (percent ?? 0) >= 80 ? "接近上限" : "额度充足"}
+                      <Badge variant={!available ? "outline" : (usedPercent ?? 0) >= 80 ? "destructive" : "secondary"}>
+                        {!available ? "暂无数据" : quota.quota === 0 ? "无可用额度" : (usedPercent ?? 0) >= 100 ? "已达上限" : (usedPercent ?? 0) >= 80 ? "接近上限" : "额度充足"}
                       </Badge>
                     </ItemHeader>
                     <ItemContent className="min-w-0 gap-3">
                       {available ? (
                         <>
                           <div className="flex flex-wrap items-baseline justify-between gap-2 text-sm tabular-nums">
-                            <span>{quota.used.toLocaleString(undefined, { maximumFractionDigits: 2 })} / {quota.quota.toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
-                            <span className="text-muted-foreground">{percent === null ? "无可用额度" : `${percent}% 已使用`}</span>
+                            <span>已用 {quota.used.toLocaleString(undefined, { maximumFractionDigits: 2 })} / {quota.quota.toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
+                            <span className="text-muted-foreground">{percent === null ? "无可用额度" : `${percent}% ${displayLabel}`}</span>
                           </div>
-                          {percent !== null && <Progress value={Math.min(100, percent)} aria-label={`${dimension.label} 已使用 ${percent}%`} />}
+                          {percent !== null && <Progress value={Math.min(100, percent)} aria-label={`${dimension.label} ${displayLabel} ${percent}%`} />}
                           {!!quota.frozen && <ItemDescription>冻结 {quota.frozen.toLocaleString(undefined, { maximumFractionDigits: 2 })}{dimension.key === "credit" ? " credit" : " 核时"}（不计入已用比例）</ItemDescription>}
                           <ItemDescription>剩余 {Math.max(0, quota.quota - quota.used).toLocaleString(undefined, { maximumFractionDigits: 2 })}{dimension.key !== "credit" && " 核时"}</ItemDescription>
                         </>
@@ -83,7 +87,7 @@ export default function UsagePage() {
             </ItemGroup>
           )}
         </CardContent>
-        <CardFooter><CardDescription>本月用量 · 已用 / 总额度{data.updatedAt && ` · 更新于 ${new Date(data.updatedAt).toLocaleString()}`}{loading && " · 正在刷新"}</CardDescription></CardFooter>
+        <CardFooter><CardDescription>本月资源 · 当前比例：{displayLabel}{data.updatedAt && ` · 更新于 ${new Date(data.updatedAt).toLocaleString()}`}{loading && " · 正在刷新"}</CardDescription></CardFooter>
       </Card>
     </>
   );

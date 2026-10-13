@@ -15,7 +15,7 @@ import { Switch } from "@/components/ui/switch";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { listenDesktop } from "@/lib/desktop";
 import { useNpc } from "@/hooks/use-npc";
-import { DEFAULT_SETTINGS, NOTCH_STATUSES, USAGE_METRICS, type AppSettings, type NotchGeometry } from "@/lib/settings";
+import { DEFAULT_SETTINGS, NOTCH_STATUSES, USAGE_DISPLAYS, USAGE_METRICS, type AppSettings, type NotchGeometry } from "@/lib/settings";
 import { selectedUsage } from "@/lib/usage";
 import { useCnb } from "@/hooks/use-cnb";
 import { TokenSettings } from "@/components/token-settings";
@@ -55,7 +55,7 @@ export default function SettingsPage() {
     return () => { disposed = true; };
   }, [desktop]);
 
-  async function update(patch: Partial<Pick<AppSettings, "notchEnabled" | "floatEnabled" | "usageOrg" | "usageMetric" | "notchStatus">>) {
+  async function update(patch: Partial<Pick<AppSettings, "notchEnabled" | "floatEnabled" | "usageOrg" | "usageMetric" | "usageDisplay" | "notchStatus">>) {
     if (!settings || saving) return;
     const previous = settings;
     setSaving(true);
@@ -65,7 +65,7 @@ export default function SettingsPage() {
     try {
       const command = "notchEnabled" in patch ? "settings_set_notch" : "floatEnabled" in patch ? "settings_set_float" : "settings_set_notch_content";
       const args = "notchEnabled" in patch ? { enabled: next.notchEnabled } : "floatEnabled" in patch ? { enabled: next.floatEnabled }
-        : { usageOrg: next.usageOrg, usageMetric: next.usageMetric, notchStatus: next.notchStatus };
+        : { usageOrg: next.usageOrg, usageMetric: next.usageMetric, usageDisplay: next.usageDisplay, notchStatus: next.notchStatus };
       setSettings(await invoke<AppSettings>(command, args));
     } catch {
       setSettings(previous);
@@ -129,7 +129,18 @@ export default function SettingsPage() {
                 }}>
                 {USAGE_METRICS.map((metric) => <ToggleGroupItem key={metric.key} value={metric.key}>{metric.label}</ToggleGroupItem>)}
               </ToggleGroup>
-              <FieldDescription>外圈表示已用比例，内部显示数字；无权限或暂无数据时显示 --。</FieldDescription>
+              <FieldDescription>外圈与数字显示所选比例；无权限或暂无数据时显示 --。</FieldDescription>
+            </Field>
+            <Field data-disabled={disabled}>
+              <FieldLabel id="usage-display-label">展示口径</FieldLabel>
+              <ToggleGroup type="single" variant="outline" spacing={2} aria-labelledby="usage-display-label"
+                disabled={disabled} value={settings?.usageDisplay ?? "remaining"} onValueChange={(value) => {
+                  const display = USAGE_DISPLAYS.find((candidate) => candidate.key === value);
+                  if (display) void update({ usageDisplay: display.key });
+                }}>
+                {USAGE_DISPLAYS.map((display) => <ToggleGroupItem key={display.key} value={display.key}>{display.label}</ToggleGroupItem>)}
+              </ToggleGroup>
+              <FieldDescription>默认显示剩余比例，即 100% 减去已用比例。设置同时应用到悬浮球、刘海和用量详情，重启后保留。</FieldDescription>
             </Field>
             <FieldSeparator />
             <Field data-disabled={disabled}>
@@ -147,10 +158,10 @@ export default function SettingsPage() {
             <Field>
               <FieldLabel>展示预览</FieldLabel>
               <div className="flex items-center justify-between gap-4 rounded-xl bg-surface px-5 py-3 text-surface-foreground" aria-label="刘海展示预览">
-                <UsageRing percent={usage.percent} label={`${usage.org?.name ?? "组织不可用"} ${usage.metric.label}`} />
+                <UsageRing percent={usage.percent} warning={usage.warning} label={`${usage.org?.name ?? "组织不可用"} ${usage.metric.label} ${usage.display.label}`} />
                 <StatusCount count={count} label={status.label} />
               </div>
-              <FieldDescription>{usage.org?.name ?? "组织不可用"} · {usage.metric.label} · 真实数据</FieldDescription>
+              <FieldDescription>{usage.org?.name ?? "组织不可用"} · {usage.metric.label} · {usage.display.label} · 真实数据</FieldDescription>
             </Field>
           </FieldGroup>
         </CardContent>

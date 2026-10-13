@@ -14,7 +14,7 @@ export default function FloatApp() {
   const settings = useSurfaceSettings();
   const { data } = useCnb();
   const usage = selectedUsage(data.error ? [] : data.orgs, settings);
-  const label = `${usage.org?.name ?? "组织不可用"} · ${usage.metric.label}`;
+  const label = `${usage.org?.name ?? "组织不可用"} · ${usage.metric.label} · ${usage.display.label}`;
 
   function endDrag(event: PointerEvent<HTMLButtonElement>) {
     if (!drag.current.active) return;
@@ -45,7 +45,7 @@ export default function FloatApp() {
         }}
         onPointerUp={endDrag} onPointerCancel={endDrag}
         onClick={(event) => { if (event.detail === 0 || drag.current.moved < CLICK_THRESHOLD) void invoke("panel_show").catch(() => {}); }}>
-        <UsageRing percent={usage.percent} label={label} />
+        <UsageRing percent={usage.percent} warning={usage.warning} label={label} />
       </Button>
     </div>
   );

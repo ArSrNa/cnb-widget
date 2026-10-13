@@ -10,7 +10,7 @@ import { listenDesktop } from "@/lib/desktop";
 import { useNpc } from "@/hooks/use-npc";
 import { useCnb } from "@/hooks/use-cnb";
 import { NOTCH_STATUSES, type NotchGeometry } from "@/lib/settings";
-import { selectedUsage, usagePercent } from "@/lib/usage";
+import { displayPercent, selectedUsage } from "@/lib/usage";
 
 const PREVIEW_GEOMETRY: NotchGeometry = { available: true, notchWidth: 184, menuBarHeight: 32 };
 const WING_WIDTH = 64;
@@ -80,7 +80,7 @@ export default function NotchApp() {
   const usage = selectedUsage(data.error ? [] : data.orgs, settings);
   const status = NOTCH_STATUSES.find((value) => value.key === settings.notchStatus) ?? NOTCH_STATUSES[0];
   const count = !npcData.updatedAt || npcData.error || npcData.warnings.length > 0 ? null : npcData.issues.filter((issue) => issue.state === status.key).length;
-  const label = `${usage.org?.name ?? "组织不可用"} · ${usage.metric.label}`;
+  const label = `${usage.org?.name ?? "组织不可用"} · ${usage.metric.label} · ${usage.display.label}`;
 
   return (
     <div className="notch-window">
@@ -97,23 +97,23 @@ export default function NotchApp() {
         <button className="notch-header" type="button"
           onClick={() => setPhase("peek")} aria-expanded={phase === "peek"} aria-controls="notch-details"
           aria-label={`${label} ${usage.percent === null ? "暂无数据" : `${usage.percent}%`}，${status.label}：${count ?? "暂无数据"}，展开刘海详情`}>
-          <span className="notch-usage"><UsageRing compact percent={usage.percent} label={label} /></span>
+          <span className="notch-usage"><UsageRing compact percent={usage.percent} warning={usage.warning} label={label} /></span>
           <span className="notch-camera" aria-hidden="true" />
           <span className="notch-status"><StatusCount compact count={count} label={status.label} /></span>
         </button>
         <div className="notch-overview" id="notch-details" inert={phase !== "peek"} aria-hidden={phase !== "peek"}>
           <div className="flex items-center justify-between gap-3 text-xs">
-            <span>{usage.metric.label} · 组织概览</span>
+            <span>{usage.metric.label} · {usage.display.label} · 组织概览</span>
             <span className="text-muted-foreground">{usage.org?.name ?? "组织不可用"}</span>
           </div>
           {(data.error || !data.orgs.length) && <span className="text-xs text-muted-foreground">请打开首页配置 CNB 连接</span>}
           <div className="flex flex-col gap-2">
             {data.orgs.slice(0, 4).map((org) => {
-              const percent = org.chargeForbidden || org.error || data.error ? null : usagePercent(org[usage.metric.dimension]);
+              const percent = org.chargeForbidden || org.error || data.error ? null : displayPercent(org[usage.metric.dimension], settings.usageDisplay);
               return (
                 <div key={org.slug} className="grid grid-cols-[7rem_minmax(0,1fr)_4rem] items-center gap-3 text-xs">
                   <span className="truncate">{org.name}</span>
-                  <Progress value={Math.min(100, percent ?? 0)} aria-label={`${org.name} ${usage.metric.label} 用量`} />
+                  <Progress value={Math.min(100, percent ?? 0)} aria-label={`${org.name} ${usage.metric.label} ${usage.display.label}`} />
                   <span className="text-right tabular-nums">{org.chargeForbidden ? "无权限" : percent === null ? "--" : `${percent}%`}</span>
                 </div>
               );

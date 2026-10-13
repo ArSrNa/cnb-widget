@@ -1,4 +1,4 @@
-import { USAGE_METRICS, type AppSettings } from "@/lib/settings";
+import { USAGE_DISPLAYS, USAGE_METRICS, type AppSettings, type UsageDisplay } from "@/lib/settings";
 
 export interface UsageQuota {
   used: number;
@@ -26,8 +26,17 @@ export function selectedUsage(orgs: OrgUsage[], settings: AppSettings) {
     ? orgs.find((candidate) => !candidate.chargeForbidden && !candidate.error)
     : orgs.find((candidate) => candidate.slug === settings.usageOrg);
   const metric = USAGE_METRICS.find((candidate) => candidate.key === settings.usageMetric) ?? USAGE_METRICS[0];
-  const percent = !org || org.chargeForbidden || org.error ? null : usagePercent(org[metric.dimension]);
-  return { org, metric, percent };
+  const quota = !org || org.chargeForbidden || org.error ? null : org[metric.dimension];
+  const usedPercent = usagePercent(quota);
+  const display = USAGE_DISPLAYS.find((candidate) => candidate.key === settings.usageDisplay) ?? USAGE_DISPLAYS[0];
+  const percent = displayPercent(quota, display.key);
+  return { org, metric, display, percent, warning: usedPercent !== null && usedPercent >= 80 };
+}
+
+export function displayPercent(quota: UsageQuota | null | undefined, display: UsageDisplay): number | null {
+  const used = usagePercent(quota);
+  if (used === null) return null;
+  return display === "used" ? used : Math.max(0, 100 - used);
 }
 
 export function usagePercent(quota?: UsageQuota | null): number | null {
