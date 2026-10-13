@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
-import { Item, ItemContent, ItemDescription, ItemHeader, ItemTitle } from "@/components/ui/item";
+import { Item, ItemGroup, ItemMedia, ItemTitle } from "@/components/ui/item";
 import { Spinner } from "@/components/ui/spinner";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useCnb } from "@/hooks/use-cnb";
@@ -53,29 +53,24 @@ export default function HomePage() {
       <CardContent>
         {loading && !data.updatedAt ? <div className="flex items-center gap-2 text-sm text-muted-foreground" role="status"><Spinner />正在读取组织与用量…</div> : data.orgs.length ? (
           <TooltipProvider>
-            <div role="list" aria-label="所属组织" className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,11rem),1fr))] gap-3">
+            <ItemGroup aria-label="所属组织" className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,11rem),1fr))] gap-3">
               {data.orgs.map((org) => {
                 const readable = !data.error && !org.chargeForbidden && !org.error && USAGE_DIMENSIONS.some(({ key }) => org[key] != null);
-                const tile = <Item variant={readable ? "success" : "outline"} className="h-full min-w-0 flex-col items-stretch gap-3" asChild>
+                const tile = <Item variant={readable ? "success" : "outline"} className="grid h-full min-w-0 grid-cols-[auto_minmax(0,1fr)] items-center gap-x-3 gap-y-1" asChild>
                   <Link to="/usage/$orgSlug" params={{ orgSlug: org.slug }} aria-label={`${org.name}，${readable ? "用量可读取" : "无法获取用量"}，查看详情`}>
-                    <ItemHeader>
-                      <OrgAvatar org={org} />
-                      <Badge variant={readable ? "success" : "warning"}>
-                        {readable ? <Check data-icon="inline-start" aria-hidden="true" /> : <TriangleAlert data-icon="inline-start" aria-hidden="true" />}
-                        {readable ? "可读取" : "无用量"}
-                      </Badge>
-                    </ItemHeader>
-                    <ItemContent className="min-w-0">
-                      <ItemTitle className="max-w-full"><span className="truncate">{org.name}</span></ItemTitle>
-                      <ItemDescription className="truncate">{org.slug}</ItemDescription>
-                    </ItemContent>
+                    <ItemMedia className="row-span-2"><OrgAvatar org={org} size="lg" /></ItemMedia>
+                    <ItemTitle className="min-w-0 max-w-full"><span className="truncate">{org.name}</span></ItemTitle>
+                    <Badge variant={readable ? "success" : "warning"} className="col-start-2">
+                      {readable ? <Check data-icon="inline-start" aria-hidden="true" /> : <TriangleAlert data-icon="inline-start" aria-hidden="true" />}
+                      {readable ? "可读取" : "无用量"}
+                    </Badge>
                   </Link>
                 </Item>;
                 return <div role="listitem" key={org.slug} className="min-w-0">
                   {readable ? tile : <Tooltip><TooltipTrigger asChild>{tile}</TooltipTrigger><TooltipContent>{UNAVAILABLE_MESSAGE}</TooltipContent></Tooltip>}
                 </div>;
               })}
-            </div>
+            </ItemGroup>
           </TooltipProvider>
         ) : <Empty><EmptyHeader><EmptyMedia variant="icon"><Gauge /></EmptyMedia><EmptyTitle>{data.updatedAt ? "暂无组织" : "连接后查看用量"}</EmptyTitle><EmptyDescription>{data.updatedAt ? "当前账号的授权范围中没有组织。" : "先配置 Token 或安装 cnb-cli。"}</EmptyDescription></EmptyHeader></Empty>}
       </CardContent>
