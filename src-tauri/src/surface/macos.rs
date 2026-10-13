@@ -7,6 +7,20 @@ use tauri::{AppHandle, Manager, WebviewWindow};
 
 use super::NotchGeometry;
 
+mod hover;
+
+pub fn install_hover(window: &WebviewWindow) -> Result<(), String> {
+    let win = window.clone();
+    on_main_thread(window.app_handle(), move |mtm| {
+        let ptr = win
+            .ns_window()
+            .map_err(|e| format!("获取原生刘海窗口失败: {e}"))?;
+        // SAFETY: Tauri owns this NSWindow and this closure runs on the AppKit main thread.
+        let native = unsafe { &*ptr.cast::<NSWindow>() };
+        hover::install(win, native, mtm)
+    })
+}
+
 fn on_main_thread<T: Send + 'static>(
     app: &AppHandle,
     work: impl FnOnce(MainThreadMarker) -> Result<T, String> + Send + 'static,

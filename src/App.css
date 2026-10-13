@@ -46,19 +46,33 @@
 .status-count-compact { width: 28px; height: 28px; }
 .status-count-compact .status-count-number { font-size: 16px; line-height: 17px; }
 .status-count-compact .status-count-label { font-size: 9px; line-height: 11px; }
+.notch-window {
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  width: 100%;
+  height: 100%;
+}
 .notch-surface {
   display: flex;
   flex-direction: column;
   align-items: center;
-  width: 100%;
-  height: 100%;
+  width: var(--notch-idle-width);
+  height: var(--notch-height);
+  flex-shrink: 0;
   overflow: hidden;
   border-radius: 0 0 10px 10px;
   background: var(--surface);
   color: var(--surface-foreground);
-  transition: border-radius 160ms ease;
+  transition: width var(--notch-motion-duration) var(--notch-motion-easing),
+    height var(--notch-motion-duration) var(--notch-motion-easing),
+    border-radius var(--notch-motion-duration) var(--notch-motion-easing);
 }
-.notch-surface[data-phase="peek"] { border-radius: 0 0 20px 20px; }
+.notch-surface[data-phase="peek"] {
+  width: var(--notch-peek-width);
+  height: calc(var(--notch-height) + 200px);
+  border-radius: 0 0 20px 20px;
+}
 .notch-header {
   display: grid;
   grid-template-columns: minmax(var(--notch-wing-width), 1fr) var(--notch-width) minmax(var(--notch-wing-width), 1fr);
@@ -74,9 +88,19 @@
   color: inherit;
   cursor: pointer;
   outline: none;
+  transition: height var(--notch-motion-duration) var(--notch-motion-easing);
 }
 .notch-header:focus-visible { box-shadow: inset 0 0 0 2px var(--ring); }
 .notch-usage, .notch-status { display: flex; align-items: center; justify-content: center; }
+.notch-surface .usage-ring-compact, .notch-surface .status-count-compact {
+  transition: width var(--notch-motion-duration) var(--notch-motion-easing),
+    height var(--notch-motion-duration) var(--notch-motion-easing),
+    font-size var(--notch-motion-duration) var(--notch-motion-easing);
+}
+.notch-surface .status-count-number, .notch-surface .status-count-label {
+  transition: font-size var(--notch-motion-duration) var(--notch-motion-easing),
+    line-height var(--notch-motion-duration) var(--notch-motion-easing);
+}
 .notch-surface[data-phase="peek"] .notch-header { height: calc(var(--notch-height) + 20px); }
 .notch-surface[data-phase="peek"] .usage-ring-compact { width: 40px; height: 40px; font-size: 10px; }
 .notch-surface[data-phase="peek"] .status-count-compact { width: 40px; height: 40px; }
@@ -87,15 +111,22 @@
   flex-direction: column;
   gap: 12px;
   width: 100%;
-  flex: 1;
+  flex-shrink: 0;
+  height: 180px;
   padding: 12px 18px;
-  animation: notch-details-enter 160ms ease-out;
+  opacity: 0;
+  transform: translateY(-6px);
+  pointer-events: none;
+  transition: opacity var(--notch-motion-duration) var(--notch-motion-easing),
+    transform var(--notch-motion-duration) var(--notch-motion-easing);
 }
-@keyframes notch-details-enter {
-  from { opacity: 0; transform: translateY(-4px); }
-  to { opacity: 1; transform: translateY(0); }
+.notch-surface[data-phase="peek"] .notch-overview {
+  opacity: 1;
+  transform: translateY(0);
+  pointer-events: auto;
 }
 @media (prefers-reduced-motion: reduce) {
-  .usage-ring-progress, .notch-surface { transition: none; }
-  .notch-overview { animation: none; }
+  .usage-ring-progress, .notch-surface, .notch-header, .notch-overview,
+  .notch-surface .usage-ring-compact, .notch-surface .status-count-compact,
+  .notch-surface .status-count-number, .notch-surface .status-count-label { transition: none; }
 }

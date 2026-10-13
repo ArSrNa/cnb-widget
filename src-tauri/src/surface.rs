@@ -124,9 +124,12 @@ pub fn show_notch_window(app: &AppHandle) -> Result<(), String> {
         .resizable(false)
         .shadow(false)
         .focused(false)
+        .accept_first_mouse(true)
         .build()
         .map_err(|e| format!("创建灵动岛窗口失败: {e}"))?;
 
+    #[cfg(target_os = "macos")]
+    macos::install_hover(&win)?;
     surface_resize(win.clone(), width, height)?;
 
     win.show().map_err(|e| format!("显示灵动岛失败: {e}"))?;

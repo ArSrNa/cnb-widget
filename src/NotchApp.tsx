@@ -6,12 +6,16 @@ import { StatusCount } from "@/components/status-count";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { useSurfaceSettings } from "@/hooks/use-surface-settings";
+import { listenDesktop } from "@/lib/desktop";
 import { MOCK_ISSUES, MOCK_ORGS } from "@/lib/mock";
 import { NOTCH_STATUSES, type NotchGeometry } from "@/lib/settings";
 import { selectedUsage, usagePercent } from "@/lib/usage";
 
 const PREVIEW_GEOMETRY: NotchGeometry = { available: true, notchWidth: 184, menuBarHeight: 32 };
 const WING_WIDTH = 64;
+const MOTION_DURATION_MS = 400;
+const MOTION_EASING = "cubic-bezier(0.4, 0, 0.2, 1)";
+const CLOSE_DELAY_MS = 200;
 type Phase = "idle" | "peek";
 
 export default function NotchApp() {
@@ -19,6 +23,8 @@ export default function NotchApp() {
   const [geometry, setGeometry] = useState(PREVIEW_GEOMETRY);
   const [phase, setPhase] = useState<Phase>("idle");
   const closeTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const hovered = useRef(false);
+  const nativeHover = useRef(false);
   const idleWidth = geometry.notchWidth + WING_WIDTH * 2;
   const peekWidth = Math.max(520, idleWidth);
 
@@ -33,17 +39,35 @@ export default function NotchApp() {
 
   useEffect(() => {
     if (!isTauri()) return;
-    void invoke("surface_resize", {
+    const resize = () => void invoke("surface_resize", {
       width: phase === "idle" ? idleWidth : peekWidth,
       height: geometry.menuBarHeight + (phase === "peek" ? 200 : 0),
     }).catch(() => {});
+    // Reserve transparent space before opening; keep it until the CSS collapse
+    // finishes so the native window never clips the animated surface.
+    if (phase === "peek" || window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      resize();
+      return;
+    }
+    const timer = setTimeout(resize, MOTION_DURATION_MS);
+    return () => clearTimeout(timer);
   }, [phase, geometry, idleWidth, peekWidth]);
 
   const close = useCallback(() => {
     clearTimeout(closeTimer.current);
     setPhase("idle");
   }, []);
-  useEffect(() => { close(); }, [settings, close]);
+  const hover = useCallback((inside: boolean) => {
+    hovered.current = inside;
+    clearTimeout(closeTimer.current);
+    if (inside) setPhase("peek");
+    else closeTimer.current = setTimeout(close, CLOSE_DELAY_MS);
+  }, [close]);
+  useEffect(() => listenDesktop<boolean>("notch-hover", ({ payload }) => {
+    nativeHover.current = true;
+    hover(payload);
+  }), [hover]);
+  useEffect(() => { if (!hovered.current) close(); }, [settings, close]);
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => { if (event.key === "Escape") close(); };
     window.addEventListener("keydown", onKey);
@@ -56,21 +80,25 @@ export default function NotchApp() {
   const label = `${usage.org?.name ?? "组织不可用"} · ${usage.metric.label}`;
 
   return (
-    <div className="notch-surface" data-phase={phase}
-      style={{ "--notch-width": `${geometry.notchWidth}px`, "--notch-height": `${geometry.menuBarHeight}px`, "--notch-wing-width": `${WING_WIDTH}px` } as CSSProperties}
-      onMouseEnter={() => { clearTimeout(closeTimer.current); setPhase("peek"); }}
-      onMouseLeave={() => { closeTimer.current = setTimeout(close, 140); }}
-      onFocusCapture={() => { clearTimeout(closeTimer.current); setPhase("peek"); }}
-      onBlurCapture={(event) => { if (!event.currentTarget.contains(event.relatedTarget)) close(); }}>
-      <button className="notch-header" type="button"
-        onClick={() => setPhase("peek")} aria-expanded={phase === "peek"} aria-controls="notch-details"
-        aria-label={`${label} ${usage.percent === null ? "暂无数据" : `${usage.percent}%`}，${status.label}：${count}，展开刘海详情`}>
-        <span className="notch-usage"><UsageRing compact percent={usage.percent} label={label} /></span>
-        <span className="notch-camera" aria-hidden="true" />
-        <span className="notch-status"><StatusCount compact count={count} label={status.label} /></span>
-      </button>
-      {phase === "peek" && (
-        <div className="notch-overview" id="notch-details">
+    <div className="notch-window">
+      <div className="notch-surface" data-phase={phase}
+        style={{
+          "--notch-width": `${geometry.notchWidth}px`, "--notch-height": `${geometry.menuBarHeight}px`,
+          "--notch-wing-width": `${WING_WIDTH}px`, "--notch-idle-width": `${idleWidth}px`, "--notch-peek-width": `${peekWidth}px`,
+          "--notch-motion-duration": `${MOTION_DURATION_MS}ms`, "--notch-motion-easing": MOTION_EASING,
+        } as CSSProperties}
+        onMouseEnter={() => { if (!nativeHover.current) hover(true); }}
+        onMouseLeave={() => { if (!nativeHover.current) hover(false); }}
+        onFocusCapture={() => { clearTimeout(closeTimer.current); setPhase("peek"); }}
+        onBlurCapture={(event) => { if (!event.currentTarget.contains(event.relatedTarget) && !hovered.current) close(); }}>
+        <button className="notch-header" type="button"
+          onClick={() => setPhase("peek")} aria-expanded={phase === "peek"} aria-controls="notch-details"
+          aria-label={`${label} ${usage.percent === null ? "暂无数据" : `${usage.percent}%`}，${status.label}：${count}，展开刘海详情`}>
+          <span className="notch-usage"><UsageRing compact percent={usage.percent} label={label} /></span>
+          <span className="notch-camera" aria-hidden="true" />
+          <span className="notch-status"><StatusCount compact count={count} label={status.label} /></span>
+        </button>
+        <div className="notch-overview" id="notch-details" inert={phase !== "peek"} aria-hidden={phase !== "peek"}>
           <div className="flex items-center justify-between gap-3 text-xs">
             <span>{usage.metric.label} · 组织概览</span>
             <span className="text-muted-foreground">{usage.org?.name ?? "组织不可用"}</span>
@@ -92,7 +120,7 @@ export default function NotchApp() {
             <Button size="xs" variant="secondary" onClick={() => { close(); void invoke("panel_show").catch(() => {}); }}>打开工作台</Button>
           </div>
         </div>
-      )}
+      </div>
     </div>
   );
 }
