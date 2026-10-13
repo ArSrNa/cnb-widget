@@ -19,11 +19,11 @@
   - name: 前端构建
     script: bun run build
   - name: Rust 格式检查
-    script: cargo fmt --all -- --check
+    script: cargo fmt --manifest-path src-tauri/Cargo.toml --all -- --check
   - name: Rust 静态检查
-    script: cargo clippy --all-targets -- -D warnings
+    script: cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
   - name: Rust 单元测试
-    script: cargo test --workspace
+    script: cargo test --manifest-path src-tauri/Cargo.toml --workspace
 
 main:
   push:
@@ -48,7 +48,7 @@ v*: # 打 tag（如 v0.1.0）触发发布构建
         - name: 前端构建
           script: bun run build
         - name: Rust 检查与测试
-          script: cargo clippy --all-targets -- -D warnings && cargo test --workspace
+          script: cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings && cargo test --manifest-path src-tauri/Cargo.toml --workspace
         - name: Release 构建
           script: bun run tauri build
 
