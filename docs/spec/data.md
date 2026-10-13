@@ -20,11 +20,24 @@
 | Issue 列表 | `issues list-issues --state open --order-by -last_acted_at` | 90s（仅白名单仓库） | 只拉 open，取前 N 条活跃 |
 | Issue 评论 | `issues list-comments --page-size 5` | 随 issue 轮询，仅当 `last_acted_at` 变化 | 500ms 间隔串行 |
 | NPC 观测（可选增强） | 直连 `/{org}/-/npc-observability/actions` | 30min | 需 Reporter+；缺失时降级为纯 issue 推导 |
-| credit 用量（方案 A） | 直连 `/{repo}/-/build/logs` → `/-/build/status/{sn}` + `/-/build/logs/ai-audit/{sn}/{pipeline}` 逐日聚合 | 30min | 只需构建日志读权限；按模型明细；聚合成本高，仅对白名单组织执行 |
-| credit 额度（方案 B） | 直连 `/group/-/charge/repos-volume` 等 | 30min | 需高权限 token（PAT / 管理员令牌）；403 时隐藏用量维度 |
-| token 用量（备选指标） | 方案 B 同源（`charge_type_token`） | 30min | 用户可切换展示指标 |
+| 组织用量（三维度） | `charge get-volume --slug <org>`（本月已用）+ `charge get-quota --slug <org>`（月度额度） | 30min | ✅ 2026-10-13 实测 owner 组织可读；字段映射见下；成员组织 403 → 该组织用量降级隐藏 |
+| 特权额度（可选） | `charge get-special-amount --slug <org>` | 6h | 核时/GiB/credit 特权明细，仅在详细面板展示 desc 与数值 |
+| 构建日志 AI audit 聚合（备选） | 直连 `/{repo}/-/build/logs` → `/-/build/logs/ai-audit/{sn}/{pipeline}` 逐日聚合 | 30min | owner 组织 charge 不可用时的备选 credit 路线（按模型明细），首版不实现 |
 
-> **credit 路线决策**：A（构建审计聚合）权限门槛低、口径细，作为默认路线；B（charge 接口）在用户配置了高权限 token 时启用，提供 quota 口径。两条路线都失败 → 该组织隐藏用量维度，不影响 NPC 面板。
+> **charge 路线决策（2026-10-13 实测修正）**：内置 cnb-cli token 对 **owner 组织**可读 `get-volume` / `get-quota`（200），三维度（credit / 云原生开发核时 / 云原生构建核时）直接可得；**成员组织 403** —— 该组织用量维度优雅降级（详细面板「无权限查看」，悬浮球汇总口径跳过），不影响 issue/NPC 维度。原「构建日志聚合为默认路线」方案作废，降级为备选。
+
+### charge 字段映射与单位换算
+
+| 展示维度 | 已用（get-volume） | 额度（get-quota.data.<k>） | 换算 |
+|---|---|---|---|
+| credit | `credit_in_milli` | `credit_in_milli.total` | milli ÷ 1000 = credit |
+| 云原生开发核时 | `dev_in_sec` | `dev_in_sec.total` | sec ÷ 3600 = 核时 |
+| 云原生构建核时 | `ci_in_sec` | `ci_in_sec.total` | sec ÷ 3600 = 核时 |
+| GPU 核时（后续） | `dev_gpu_in_sec` / `ci_gpu_in_sec` | 同名 `.total` | sec ÷ 3600 = 核时 |
+| 存储（后续） | `object_in_byte` / `git_in_byte` | 同名 `.total` | byte ÷ 2³⁰ = GiB |
+
+- 百分比口径：`已用 ÷ total`；冻结额度（`freeze_dev_in_sec` / `freeze_credit_in_milli`）暂不计入分母，详细面板单独标注；
+- `get-quota` 的 `free` 为月度免费额度（已含在 total 内），面板「剩余」= total − 已用。
 
 - **监控范围**：组织白名单制（见 [../intent/data.md](../intent/data.md) §3）。
 - **缓存**：内存为主；退出时快照到 `<app_data_dir>/cache.json`，启动先渲染缓存再后台刷新。

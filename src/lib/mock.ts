@@ -7,12 +7,27 @@ export type IssueState =
   | "NPC_QUEUED"
   | "WAITING_REPLY";
 
+export interface UsageQuota {
+  used: number; // 已用
+  quota: number; // 总额度
+}
+
 export interface OrgUsage {
   slug: string;
   name: string;
-  used: number; // 已用 credit
-  quota: number; // 总额度
+  chargeForbidden?: boolean; // charge 接口 403（成员组织）→ 无权限查看
+  credit?: UsageQuota; // 字段缺失 → 数据不可用，显示 —
+  devCorehour?: UsageQuota; // 云原生开发核时
+  ciCorehour?: UsageQuota; // 云原生构建核时
 }
+
+export const USAGE_DIMENSIONS = [
+  { key: "credit", label: "credit" },
+  { key: "devCorehour", label: "云原生开发核时" },
+  { key: "ciCorehour", label: "云原生构建核时" },
+] as const;
+
+export type UsageDimensionKey = (typeof USAGE_DIMENSIONS)[number]["key"];
 
 export interface NpcIssue {
   repo: string; // org/repo
@@ -23,9 +38,25 @@ export interface NpcIssue {
 }
 
 export const MOCK_ORGS: OrgUsage[] = [
-  { slug: "arsrna", name: "Ar-Sr-Na", used: 612, quota: 1000 },
-  { slug: "team-alpha", name: "Alpha 团队", used: 8234, quota: 10000 },
-  { slug: "lab", name: "Lab 实验室", used: 156, quota: 2000 },
+  {
+    slug: "arsrna",
+    name: "Ar-Sr-Na",
+    credit: { used: 612, quota: 1000 },
+    devCorehour: { used: 86, quota: 120 },
+    ciCorehour: { used: 412, quota: 500 },
+  },
+  {
+    slug: "1024hub",
+    name: "1024Hub",
+    credit: { used: 8234, quota: 10000 },
+    devCorehour: { used: 96, quota: 100 },
+  },
+  {
+    slug: "team-alpha",
+    name: "Alpha 团队",
+    credit: { used: 156, quota: 2000 },
+  },
+  { slug: "lab", name: "Lab 实验室", chargeForbidden: true },
 ];
 
 export const MOCK_ISSUES: NpcIssue[] = [

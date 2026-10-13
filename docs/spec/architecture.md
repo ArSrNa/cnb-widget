@@ -27,10 +27,11 @@
 | 模块 | 职责 | 状态 |
 |---|---|---|
 | `cli.rs` | cnb-cli 安装（appdata 托管）、调用封装、错误分类 | ✅ 已实现 |
-| `surface.rs` | 胶囊/悬浮窗窗口尺寸与定位（贴顶居中） | ✅ 最简版已实现 |
+| `surface.rs` | 胶囊/悬浮球窗口尺寸与定位（贴顶居中 / 悬浮球拖动） | ✅ 最简版已实现 |
+| `settings.rs` | 设置持久化 + 表面显隐同步 | ✅ 已实现（用量口径项待加） |
 | `collector.rs` | 轮询调度、变更检测、串行化 | 待实现 |
 | `store.rs` | 内存态 + 启动渲染缓存 | 待实现 |
-| `notch_probe.rs` | CGDisplayStream 探测刘海几何 | 🚫 后续里程碑 |
+| `notch_probe.rs` | 刘海屏可用性探测（`NSScreen.safeAreaInsets` + 型号兜底，无权限要求）；精确贴合 frame 的 CGDisplayStream 留 M4 | ⏳ M2 实施可用性探测 |
 
 ## 关键决策（沿用 decision.md）
 

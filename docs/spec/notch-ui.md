@@ -1,52 +1,94 @@
-# 刘海 / 悬浮窗 UI Spec
+# 刘海 / 悬浮球 UI Spec
+
+> 2026-10-13 需求评估定稿：展开形态 = 悬浮球旁气泡面板（NSPanel）；口径 = 单选组织 × 维度；刘海点击与悬浮球一致。
 
 ## 1. 双表面（Surface）模型
 
 | 表面 | 触发条件 | 形态 |
 |---|---|---|
-| 刘海胶囊 | 内建刘海屏 + 屏幕录制权限 | 贴合刘海两侧的胶囊，与刘海视觉融合 |
-| 悬浮窗 | 兜底 / 无刘海屏 / 外接屏 | 贴顶居中悬浮胶囊；hover 直接展开完整面板 |
+| 刘海胶囊 | 内建刘海屏（见 §4 探测）+ 用户开关开启 | 贴合刘海两侧的胶囊，与刘海视觉融合 |
+| 悬浮球 | 用户开关开启（任意屏幕可用） | 360 加速球形：外圈进度环 + 内圈百分比，可拖动 |
+
+- 两表面显隐由主面板设置独立控制（settings `notchEnabled` / `floatEnabled`，已实现）；
+- 灵动刘海在探测到无刘海屏时强制隐藏，主面板开关禁用并附提示；
+- **两表面点击行为一致**：弹出气泡详细面板（§3.2），不再打开主面板。
 
 ## 2. 形态状态机（NotchSurface）
 
 ```
-idle ──hover──▶ peek ──click──▶ panel
-  ▲              │                │
-  └────── mouse leave ◀───────────┘（panel 内点击外部/Esc 也收回）
+idle ──hover──▶ peek ──click──▶ bubble（独立 NSPanel，见 §3.2）
+  ▲              │
+  └────── mouse leave ◀┘
 
-idle/peek/panel 之上可叠加 event 横幅（6s 自动收回）
+idle/peek 之上可叠加 event 横幅（6s 自动收回）
 ```
 
 | 形态 | 内容 | 尺寸（逻辑像素） |
 |---|---|---|
-| **idle** | 左胶囊：汇总指标（默认 credit 汇总）；右胶囊：NPC 状态圆点矩阵 | 200×32 |
-| **peek** | 横条：逐组织 credit 用量条 + 各状态计数 | 480×140 |
-| **panel** | 完整面板：组织切换 tabs → 用量明细（进度条/本月消耗）→ 活跃 issue 列表（状态徽标/仓库/标题/最后动作时间/点击打开 issue） | 600×440 |
+| **idle** | 左胶囊：当前口径用量环 + 百分比；右胶囊：NPC 状态圆点矩阵 | 200×32 |
+| **peek** | 横条：逐组织用量条 + 各状态计数 | 480×140 |
 | **event** | 「NPC ✅ 完成 xxx」「NPC ❌ 失败 xxx」横幅 | peek 尺寸，叠加于当前形态之上 |
 
-- 无刘海屏：hover idle 胶囊直接进 panel（跳过 peek）；
-- panel 内按组织切换查看明细（intent/display.md §2）。
+- 原「panel 完整面板」形态从刘海状态机移除，由气泡面板承载（§3.2）；
+- 无刘海屏 hover 语义不变：idle → peek。
 
-## 3. 窗口实现（M1 最简版，已实现）
+## 3. 悬浮球（Float，已实现拖动/显隐，进度环与气泡面板待实现）
 
-- 单一透明窗口（`transparent + decorations:false + alwaysOnTop + skipTaskbar + shadow:false`）承载全部形态；
-- 窗口随形态切换 resize + 重新贴顶居中（`surface_resize` 命令，物理像素换算 scale factor）；
-- idle 态窗口只占胶囊大小，自然实现「胶囊外区域可点击穿透到下层应用」；
-- 非刘海屏 hover 语义：胶囊区域 `mouseenter` → panel。
+### 3.1 idle 球体
 
-## 4. 后续增强（按里程碑）
+- 窗口 64×64 逻辑像素，透明背景（现状）；
+- **外圈进度环**：CSS `conic-gradient` 或 SVG 弧线（自绘，组件库不覆盖，符合「仅表面自绘」约定）：
+  - 弧度 = 口径百分比 × 360°；用量 > 80% 环色变红（`#f87171`），否则主色（`#818cf8`）；
+- **内圈百分比**：整数数字，同口径；
+- **口径（定稿）**：单选组织 × 单选维度 —— settings `usageMetric`（credit / dev-corehour / ci-corehour）× `usageOrg`（主面板指定单个组织）；
+  - 所选组织 charge 403 或数据缺失 → 显示 `--`（气泡面板内提示无权限）；
+  - 刘海 idle 左胶囊与悬浮球**共用同一口径配置**，行为一致；
+- 拖动交互保持现状（`float_nudge` / `float_settle`，位移阈值区分点击）。
 
-| 项 | 方案 |
-|---|---|
-| 刘海贴合 | `notch_probe`（CGDisplayStream）探测 notch frame，胶囊左右分置刘海两侧 🚫 |
-| 全屏 App 不抢焦 | NSPanel（tauri-nspanel）+ `nonactivating` + `visibleOnAllWorkspaces` |
-| 事件提醒 | 状态跃迁 → 蓝点/红点 + 横幅 + 可选系统通知；前台全屏时只收进胶囊 |
-| 鼠标穿透精细化 | `set_ignore_mouse_events(true, forward)` 按内容边界切换 |
-| 自启动 | `SMAppService`（LoginItem），设置页开关 |
-| 菜单栏兜底 | NSStatusItem 图标（打开面板/设置/退出） |
+### 3.2 气泡详细面板（Bubble，定稿）
 
-## 5. 设置项（展示可配置）
+- **承载**：独立窗口，NSPanel（`tauri-nspanel`）+ nonactivating，不抢焦点（提前引入，原 M4 项）；
+- **触发**：悬浮球 / 刘海胶囊点击（位移 < 阈值）；
+- **定位**：悬浮球触发时贴球弹出（默认球体下方，靠近屏幕边缘自动翻转）；刘海触发时从刘海下方弹出；
+- **尺寸**：约 480×360 逻辑像素，内部滚动；
+- **收回**：点击面板外部 / Esc / 再次点击表面；
+- **内容（全部监控组织）**：
+  1. 用量余额区：逐组织 × 三维度（credit / 开发核时 / 构建核时）已用与剩余进度条；charge 403 的组织显示「无权限查看」，不阻塞其他组织；
+  2. NPC 对话区：状态计数（工作中 / 已回复 / 失败）+ 活跃 issue 列表（状态徽标 / 仓库 / 标题 / 最后动作时间，点击浏览器打开 issue）。
 
-- 左胶囊指标：credit / token 用量 / 构建次数；
-- 悬浮窗内容模块：用量 / NPC 动态 / 组合；
-- 面板字段显隐、组织白名单（见 intent/data.md §3）。
+## 4. 刘海屏能力探测（新增，替代原 CGDisplayStream 全量方案）
+
+「灵动刘海仅 MacBook 刘海屏可用」的探测，按优先级：
+
+1. **`NSScreen.safeAreaInsets`**（macOS 12+）：主屏 `safeAreaInsets.top > 0` 即有刘海 —— 无需屏幕录制权限，走 objc2 调用（Tauri 主进程）；
+2. 硬件型号兜底：`sysctl hw.model` 对照已知刘海机型清单（MacBook Pro 14″/16″ 2021+、MacBook Air M2+）；
+3. 探测结果通过 command 暴露给前端（`notch_available`），主面板据此禁用开关；运行期显示器热插拔重探（外接屏不影响内建屏判定）。
+
+> 原 notch_probe（CGDisplayStream 探测刘海 frame 精确贴合）保留为 M4 增强项；本节探测只回答「可用/不可用」，无权限要求，提前至 M2 实施。
+
+## 5. 窗口实现
+
+- 刘海：单一透明窗口（`transparent + decorations:false + alwaysOnTop + skipTaskbar + shadow:false`）承载 idle/peek/event，随形态切换 resize + 重新贴顶居中（`surface_resize`，物理像素换算 scale factor）；idle 态窗口只占胶囊大小，自然实现「胶囊外区域可点击穿透到下层应用」；
+- 悬浮球：独立透明窗口 64×64，可拖动、位置持久化（已实现）；
+- 气泡面板：独立 NSPanel 窗口（§3.2），默认隐藏，按需弹出。
+
+## 6. 主面板（Panel，工作台）
+
+主面板为工作台（左右布局、一级导航、用量详情下组织二级菜单），布局与密度规范见 [panel-ui.md](./panel-ui.md)；本节仅汇总由主面板承载的设置项：
+
+- **显示**：灵动刘海开关（无刘海屏时禁用 + 提示）、悬浮球开关；
+- **用量口径**：维度单选（credit / 云原生开发核时 / 云原生构建核时）× 组织单选（选项 = 组织白名单 ∩ owner 组织；白名单机制见 intent/data.md §3）；
+- **连接**：cnb-cli 状态 / 安装 / 登录引导（SetupView，已实现）。
+
+## 7. 设置项汇总（主面板承载）
+
+| 设置项 | 存储 | 默认 | 状态 |
+|---|---|---|---|
+| 灵动刘海显隐 | `notchEnabled` | 开 | ✅ 已实现（无刘海屏禁用待加） |
+| 悬浮球显隐 | `floatEnabled` | 开 | ✅ 已实现 |
+| 悬浮球位置 | `floatPos` | 主屏右侧 1/3 处 | ✅ 已实现 |
+| 用量维度 | `usageMetric`：credit / dev-corehour / ci-corehour | credit | 待实现 |
+| 用量组织 | `usageOrg`：单选（白名单 ∩ owner 组织） | 首个 owner 组织 | 待实现 |
+| 面板字段显隐、组织白名单 | — | — | M3（见 intent/data.md §3） |
+
+- 设置变更经 `settings-changed` 事件广播，刘海/悬浮球/气泡即时生效（现状已有）。

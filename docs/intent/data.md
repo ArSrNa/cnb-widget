@@ -1,10 +1,23 @@
 # 数据维度意图
 
-## 1. 组织 credit 用量（默认主指标）
+## 1. 组织用量维度（2026-10-13 需求扩展）
 
-- 按组织分维度展示 credit 剩余 / 本月用量；
-- credit 是默认展示指标，**用户可更换**（如 token 用量、构建次数）；
-- 部分数据源存在权限门槛，缺失时优雅降级隐藏该维度，不影响其他功能。
+用量维度从单一 credit 扩展为**三维度**，悬浮球/刘海展示哪个组织哪个维度由主面板配置：
+
+| 维度 | 含义 | 接口字段 | 单位换算 |
+|---|---|---|---|
+| **credit** | 平台通用额度 | `credit_in_milli`（用量）/ `credit_in_milli.total`（额度） | milli ÷ 1000 = credit |
+| **云原生开发核时** | 云开发环境算力 | `dev_in_sec` / `dev_in_sec.total` | sec ÷ 3600 = 核时 |
+| **云原生构建核时** | CI 构建算力 | `ci_in_sec` / `ci_in_sec.total` | sec ÷ 3600 = 核时 |
+
+- 后续可扩展：GPU 核时（`dev_gpu_in_sec` / `ci_gpu_in_sec`）、存储（`object_in_byte` / `git_in_byte`）——接口字段已就绪，首版不做；
+- **悬浮球/刘海 idle 口径（已确认，2026-10-13）**：
+  - **单选组织 × 单选维度**：主面板指定一个组织与一个维度，悬浮球/刘海只显示该组合的 `已用 / 总额度` 百分比；气泡面板内查看全部组织明细；
+  - 组织选项 = 组织白名单 ∩ owner 组织（成员组织 403 不可选）；所选组织数据缺失/403 时显示 `--`；
+  - 冻结额度（`freeze_*`）暂不计入分母，详细面板中单独展示；
+- **权限边界（2026-10-13 实测修正）**：
+  - 自己为 owner 的组织：`get-volume` / `get-quota` 均可读（200）；
+  - 仅为其成员的组织：403 —— 该组织的用量维度**优雅降级**（详细面板显示「无权限查看」，悬浮球汇总口径自动跳过该组织），不影响 issue/NPC 维度。
 
 ## 2. NPC 工作动态（issue 对话）
 
@@ -18,10 +31,8 @@
 - 白名单内仓库默认全量，支持 `org/repo` 级排除；
 - 面板内展示哪些字段（用量口径、issue 字段）均可配置。
 
-## 4. 已确认的权限结论（2026-10-13）
+## 4. 已确认的权限结论（2026-10-13 更新）
 
-- cnb-cli 内置 OAuth token 无 `group-resource:r`，直接取组织 charge quota 会 403；
-- 社区同类看板的实践（参考公开 CI 状态看板项目的做法）给出替代路线，已纳入 [../spec/data.md](../spec/data.md)：
-  1. **构建日志 AI audit 聚合**：逐仓库拉取当日构建列表，再取每条构建的 AI 用量明细聚合 —— 只需构建日志读权限，credit 口径甚至比 quota 更细（按模型明细）；
-  2. **组织资源用量接口**：`/group/-/charge/repos-volume` 等，需要更高权限的 token（PAT 或管理员令牌）；
-  3. NPC 观测数据：`/{org}/-/npc-observability/actions`（需 Reporter 及以上），作为 issue 评论状态的增强数据源（非必需）。
+- ~~cnb-cli 内置 OAuth token 无 `group-resource:r`，charge 接口一律 403~~ → **实测修正**：内置 token 对 **owner 组织**可读 charge；仅成员组织仍 403（见 §1）；
+- 数据路线确认：`cnb charge get-volume`（本月用量）+ `get-quota`（月度额度）+ `get-special-amount`（特权额度，可选）即可覆盖三维度，**不再依赖构建日志聚合（原方案 A）作为默认**，其降级为 owner 组织 charge 不可用时的备选；
+- NPC 观测数据：`/{org}/-/npc-observability/actions`（需 Reporter 及以上），作为 issue 评论状态的增强数据源（非必需）。

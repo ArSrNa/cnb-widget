@@ -25,10 +25,10 @@ cnb-island/
 | 阶段 | 内容 | 验收 |
 |---|---|---|
 | M0 cli 接入 | cnb-cli 托管安装（appdata）+ 调用封装 + 引导页 | 可安装、可调用、错误分类正确 |
-| **M1 刘海骨架** | **透明窗口贴顶胶囊 + hover/click 形态切换（mock 数据）** | **不抢焦点、穿透正确、三形态走通** |
-| M2 数据 | collector + store + 状态推导，真实 issue/credit 上胶囊 | 状态点与 CNB 网页一致 |
-| M3 面板 | 组织切换、issue 列表、点击跳转、event 横幅、设置页 | 展示内容可配置 |
-| M4 刘海 | notch-probe + 屏幕录制权限流 + NSPanel 精确贴合 | 内建屏贴合刘海 |
+| **M1 刘海骨架** | **透明窗口贴顶胶囊 + 悬浮球（拖动/显隐/点击）+ 主面板设置页（mock 数据）** | **不抢焦点、穿透正确、表面开关生效** |
+| M2 数据 | collector + store + 状态推导 + charge 三维度；**刘海屏可用性探测** | 状态点与 CNB 网页一致；owner 组织用量上表面；无刘海屏时刘海开关禁用 |
+| M3 面板 | **气泡详细面板**（tauri-nspanel 提前引入，nonactivating 不抢焦点）、event 横幅、主面板工作台（左右布局 / 一级导航 / 组织二级菜单，[panel-ui.md](./panel-ui.md)） | 气泡不抢焦点、逐组织用量余额与 issue 列表可点开、口径设置生效 |
+| M4 刘海 | notch-probe（CGDisplayStream）+ 屏幕录制权限流 + NSPanel 精确贴合 | 内建屏贴合刘海 |
 | M5 打磨 | 自启动、菜单栏兜底、打包 dmg | 可日常自用 |
 
 ## 3. 风险

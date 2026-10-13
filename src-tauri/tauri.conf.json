@@ -13,17 +13,13 @@
     "macOSPrivateApi": true,
     "windows": [
       {
-        "label": "notch",
+        "label": "main",
         "title": "cnb-widget",
-        "width": 200,
-        "height": 32,
-        "transparent": true,
-        "decorations": false,
-        "alwaysOnTop": true,
-        "skipTaskbar": true,
-        "resizable": false,
-        "shadow": false,
-        "center": false
+        "width": 780,
+        "height": 560,
+        "minWidth": 620,
+        "minHeight": 460,
+        "center": true
       }
     ],
     "security": {
