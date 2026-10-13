@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useState } from "react";
 import { invoke, isTauri } from "@tauri-apps/api/core";
+import { openUrl } from "@tauri-apps/plugin-opener";
 import { AlertCircle, Settings } from "lucide-react";
 import { PageHeading } from "@/components/page-heading";
 import { UsageRing } from "@/components/usage-ring";
 import { StatusCount } from "@/components/status-count";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Field, FieldContent, FieldDescription, FieldGroup, FieldLabel, FieldSeparator } from "@/components/ui/field";
@@ -25,6 +27,7 @@ export default function SettingsPage() {
   const desktop = isTauri();
   const [settings, setSettings] = useState<AppSettings | null>(desktop ? null : DEFAULT_SETTINGS);
   const [saving, setSaving] = useState(false);
+  const [footerError, setFooterError] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notchAvailable, setNotchAvailable] = useState<boolean | null>(desktop ? null : true);
 
@@ -154,6 +157,18 @@ export default function SettingsPage() {
       </Card>
       <TokenSettings />
       <SetupView />
+      {footerError && <Alert variant="destructive"><AlertCircle /><AlertTitle>无法打开网站</AlertTitle><AlertDescription>请在浏览器访问 https://www.arsrna.cn。</AlertDescription></Alert>}
+      <footer className="flex items-center justify-center gap-1 text-sm text-muted-foreground">
+        <span>Powered by</span>
+        <Button variant="link" size="sm" asChild>
+          <a href="https://www.arsrna.cn" target="_blank" rel="noopener noreferrer" onClick={(event) => {
+            if (!desktop) return;
+            event.preventDefault();
+            setFooterError(false);
+            void openUrl("https://www.arsrna.cn").catch(() => setFooterError(true));
+          }}>Ar-Sr-Na</a>
+        </Button>
+      </footer>
     </>
   );
 }

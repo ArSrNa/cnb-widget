@@ -1,28 +1,84 @@
+import { useState } from "react";
 import { Link } from "@tanstack/react-router";
-import { AlertCircle, Gauge, RefreshCw } from "lucide-react";
+import { AlertCircle, Check, ChevronDown, Gauge, RefreshCw, TriangleAlert } from "lucide-react";
 import { PageHeading } from "@/components/page-heading";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { OrgAvatar } from "@/components/org-avatar";
 import { TokenSettings } from "@/components/token-settings";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
-import { Item, ItemContent, ItemDescription, ItemGroup, ItemMedia, ItemTitle } from "@/components/ui/item";
+import { Item, ItemContent, ItemDescription, ItemHeader, ItemTitle } from "@/components/ui/item";
 import { Spinner } from "@/components/ui/spinner";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useCnb } from "@/hooks/use-cnb";
+import { USAGE_DIMENSIONS } from "@/lib/usage";
 import SetupView from "@/SetupView";
+
+const UNAVAILABLE_MESSAGE = "无法获取用量，请检查权限和组织角色。";
 
 export default function HomePage() {
   const { data, loading, refresh } = useCnb();
+  const [connectionExpanded, setConnectionExpanded] = useState<boolean | null>(null);
+  const connected = !!data.username && data.updatedAt !== null;
+  const connectionOpen = connectionExpanded ?? !connected;
+
   return <>
     <PageHeading title="首页" description="连接 CNB，查看真实组织用量。" media={<Avatar size="lg"><AvatarFallback><Gauge className="size-5" /></AvatarFallback></Avatar>} action={<Button variant="outline" disabled={loading} onClick={() => void refresh(true)}>{loading ? <Spinner data-icon="inline-start" /> : <RefreshCw data-icon="inline-start" />}刷新用量</Button>} />
-    <TokenSettings />
+    <Collapsible open={connectionOpen} onOpenChange={setConnectionExpanded} className="flex flex-col gap-4">
+      <Card>
+        <CardHeader>
+          <CardTitle>CNB 连接</CardTitle>
+          <CardDescription>{connected ? `已连接 @${data.username}` : "配置访问令牌，开始查看组织用量。"}</CardDescription>
+          <CardAction>
+            <CollapsibleTrigger asChild>
+              <Button variant="outline" size="sm" aria-label={connectionOpen ? "收起连接设置" : "展开连接设置"}>
+                {connectionOpen ? "收起设置" : "连接设置"}<ChevronDown data-icon="inline-end" className="transition-transform in-data-[state=open]:rotate-180" />
+              </Button>
+            </CollapsibleTrigger>
+          </CardAction>
+        </CardHeader>
+      </Card>
+      <CollapsibleContent className="flex flex-col gap-4">
+        <TokenSettings />
+        <SetupView />
+      </CollapsibleContent>
+    </Collapsible>
     {data.error && <Alert variant="destructive"><AlertCircle /><AlertTitle>数据读取失败</AlertTitle><AlertDescription>{data.error}</AlertDescription></Alert>}
     <Card>
       <CardHeader><CardTitle>{data.username ? `@${data.username} 的组织` : "所属组织"}</CardTitle><CardDescription>资源用量每 30 分钟刷新，可手动更新。</CardDescription></CardHeader>
-      <CardContent>{loading && !data.updatedAt ? <div className="flex items-center gap-2 text-sm text-muted-foreground" role="status"><Spinner />正在读取组织与用量…</div> : data.orgs.length ? <ItemGroup className="gap-3">{data.orgs.map((org) => <Item key={org.slug} variant="outline" asChild><Link to="/usage/$orgSlug" params={{ orgSlug: org.slug }}><ItemMedia><OrgAvatar org={org} /></ItemMedia><ItemContent><ItemTitle>{org.name}</ItemTitle><ItemDescription>{org.chargeForbidden ? "无权限读取用量，请检查 Token 权限和组织角色" : org.error ?? org.slug}</ItemDescription></ItemContent></Link></Item>)}</ItemGroup> : <Empty><EmptyHeader><EmptyMedia variant="icon"><Gauge /></EmptyMedia><EmptyTitle>{data.updatedAt ? "暂无组织" : "连接后查看用量"}</EmptyTitle><EmptyDescription>{data.updatedAt ? "当前账号的授权范围中没有组织。" : "先配置 Token 或安装 cnb-cli。"}</EmptyDescription></EmptyHeader></Empty>}</CardContent>
+      <CardContent>
+        {loading && !data.updatedAt ? <div className="flex items-center gap-2 text-sm text-muted-foreground" role="status"><Spinner />正在读取组织与用量…</div> : data.orgs.length ? (
+          <TooltipProvider>
+            <div role="list" aria-label="所属组织" className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,11rem),1fr))] gap-3">
+              {data.orgs.map((org) => {
+                const readable = !data.error && !org.chargeForbidden && !org.error && USAGE_DIMENSIONS.some(({ key }) => org[key] != null);
+                const tile = <Item variant={readable ? "success" : "outline"} className="h-full min-w-0 flex-col items-stretch gap-3" asChild>
+                  <Link to="/usage/$orgSlug" params={{ orgSlug: org.slug }} aria-label={`${org.name}，${readable ? "用量可读取" : "无法获取用量"}，查看详情`}>
+                    <ItemHeader>
+                      <OrgAvatar org={org} />
+                      <Badge variant={readable ? "success" : "warning"}>
+                        {readable ? <Check data-icon="inline-start" aria-hidden="true" /> : <TriangleAlert data-icon="inline-start" aria-hidden="true" />}
+                        {readable ? "可读取" : "无用量"}
+                      </Badge>
+                    </ItemHeader>
+                    <ItemContent className="min-w-0">
+                      <ItemTitle className="max-w-full"><span className="truncate">{org.name}</span></ItemTitle>
+                      <ItemDescription className="truncate">{org.slug}</ItemDescription>
+                    </ItemContent>
+                  </Link>
+                </Item>;
+                return <div role="listitem" key={org.slug} className="min-w-0">
+                  {readable ? tile : <Tooltip><TooltipTrigger asChild>{tile}</TooltipTrigger><TooltipContent>{UNAVAILABLE_MESSAGE}</TooltipContent></Tooltip>}
+                </div>;
+              })}
+            </div>
+          </TooltipProvider>
+        ) : <Empty><EmptyHeader><EmptyMedia variant="icon"><Gauge /></EmptyMedia><EmptyTitle>{data.updatedAt ? "暂无组织" : "连接后查看用量"}</EmptyTitle><EmptyDescription>{data.updatedAt ? "当前账号的授权范围中没有组织。" : "先配置 Token 或安装 cnb-cli。"}</EmptyDescription></EmptyHeader></Empty>}
+      </CardContent>
     </Card>
-    <SetupView />
   </>;
 }
