@@ -1,9 +1,12 @@
 // 应用设置（与 src-tauri/src/settings.rs 的 Settings 对齐）
 
 export const USAGE_METRICS = [
-  { key: "credit", dimension: "credit", label: "credit" },
-  { key: "dev-corehour", dimension: "devCorehour", label: "云原生开发核时" },
-  { key: "ci-corehour", dimension: "ciCorehour", label: "云原生构建核时" },
+  { key: "credit", dimension: "credit", label: "AI Credits", unit: "Credits" },
+  { key: "git-storage", dimension: "gitStorage", label: "代码仓库存储", unit: "GiB" },
+  { key: "object-storage", dimension: "objectStorage", label: "对象存储", unit: "GiB" },
+  { key: "ci-corehour", dimension: "ciCorehour", label: "云原生构建-CPU", unit: "核时" },
+  { key: "dev-corehour", dimension: "devCorehour", label: "云原生开发-CPU", unit: "核时" },
+  { key: "dev-gpu-corehour", dimension: "devGpuCorehour", label: "云原生开发-GPU", unit: "核时" },
 ] as const;
 
 export const USAGE_DISPLAYS = [

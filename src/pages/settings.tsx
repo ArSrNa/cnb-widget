@@ -129,7 +129,7 @@ export default function SettingsPage() {
                 }}>
                 {USAGE_METRICS.map((metric) => <ToggleGroupItem key={metric.key} value={metric.key}>{metric.label}</ToggleGroupItem>)}
               </ToggleGroup>
-              <FieldDescription>外圈与数字显示所选比例；无权限或暂无数据时显示 --。</FieldDescription>
+              <FieldDescription>AI Credits 按 Credits、存储按 GiB、CPU/GPU 按核时统计。外圈与数字显示所选比例；无权限或暂无数据时显示 --。</FieldDescription>
             </Field>
             <Field data-disabled={disabled}>
               <FieldLabel id="usage-display-label">展示口径</FieldLabel>

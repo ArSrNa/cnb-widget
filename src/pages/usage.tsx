@@ -71,12 +71,12 @@ export default function UsagePage() {
                       {available ? (
                         <>
                           <div className="flex flex-wrap items-baseline justify-between gap-2 text-sm tabular-nums">
-                            <span>已用 {quota.used.toLocaleString(undefined, { maximumFractionDigits: 2 })} / {quota.quota.toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
+                            <span>已用 {quota.used.toLocaleString(undefined, { maximumFractionDigits: 3 })} / {quota.quota.toLocaleString(undefined, { maximumFractionDigits: 3 })} {dimension.unit}</span>
                             <span className="text-muted-foreground">{percent === null ? "无可用额度" : `${percent}% ${displayLabel}`}</span>
                           </div>
                           {percent !== null && <Progress value={Math.min(100, percent)} aria-label={`${dimension.label} ${displayLabel} ${percent}%`} />}
-                          {!!quota.frozen && <ItemDescription>冻结 {quota.frozen.toLocaleString(undefined, { maximumFractionDigits: 2 })}{dimension.key === "credit" ? " credit" : " 核时"}（不计入已用比例）</ItemDescription>}
-                          <ItemDescription>剩余 {Math.max(0, quota.quota - quota.used).toLocaleString(undefined, { maximumFractionDigits: 2 })}{dimension.key !== "credit" && " 核时"}</ItemDescription>
+                          {!!quota.frozen && <ItemDescription>冻结 {quota.frozen.toLocaleString(undefined, { maximumFractionDigits: 3 })} {dimension.unit}（不计入已用比例）</ItemDescription>}
+                          <ItemDescription>剩余 {Math.max(0, quota.quota - quota.used).toLocaleString(undefined, { maximumFractionDigits: 3 })} {dimension.unit}</ItemDescription>
                         </>
                       ) : <ItemDescription>该组织暂未提供此项用量信息。</ItemDescription>}
                     </ItemContent>

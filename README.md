@@ -2,6 +2,8 @@
 
 基于 Tauri、React 和 shadcn/ui 的 CNB 桌面工作台，展示真实组织资源用量与 Issue / NPC 状态。
 
+支持 AI Credits、代码仓库存储、对象存储、云原生构建-CPU、云原生开发-CPU、云原生开发-GPU 六项资源；可在设置中选择维度与已用/剩余展示口径。
+
 ## 连接 CNB
 
 首次打开进入首页，安装或检测 cnb-cli，再填入个人访问令牌。创建位置为 [CNB 个人访问令牌](https://cnb.cool/profile/token)。勾选只读权限：

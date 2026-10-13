@@ -26,8 +26,11 @@ pub struct OrgUsage {
     charge_forbidden: bool,
     error: Option<String>,
     credit: Option<UsageQuota>,
+    git_storage: Option<UsageQuota>,
+    object_storage: Option<UsageQuota>,
     dev_corehour: Option<UsageQuota>,
     ci_corehour: Option<UsageQuota>,
+    dev_gpu_corehour: Option<UsageQuota>,
 }
 #[derive(Clone, Default, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -209,8 +212,11 @@ async fn collect_usage(
             charge_forbidden: false,
             error: None,
             credit: None,
+            git_storage: None,
+            object_storage: None,
             dev_corehour: None,
             ci_corehour: None,
+            dev_gpu_corehour: None,
         };
         let volume = versioned_call(
             app,
@@ -257,8 +263,11 @@ async fn collect_usage(
         match (volume, limits) {
             (Ok(volume), Ok(limits)) => {
                 org.credit = quota(&volume, &limits, "credit_in_milli", 1000.0);
+                org.git_storage = quota(&volume, &limits, "git_in_byte", 1_073_741_824.0);
+                org.object_storage = quota(&volume, &limits, "object_in_byte", 1_073_741_824.0);
                 org.dev_corehour = quota(&volume, &limits, "dev_in_sec", 3600.0);
                 org.ci_corehour = quota(&volume, &limits, "ci_in_sec", 3600.0);
+                org.dev_gpu_corehour = quota(&volume, &limits, "dev_gpu_in_sec", 3600.0);
             }
             (Err(error), _) | (_, Err(error)) => org.error = Some(error),
         }

@@ -17,10 +17,16 @@ pub enum UsageMetric {
     #[default]
     #[serde(rename = "credit")]
     Credit,
+    #[serde(rename = "git-storage")]
+    GitStorage,
+    #[serde(rename = "object-storage")]
+    ObjectStorage,
     #[serde(rename = "dev-corehour")]
     DevCorehour,
     #[serde(rename = "ci-corehour")]
     CiCorehour,
+    #[serde(rename = "dev-gpu-corehour")]
+    DevGpuCorehour,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]

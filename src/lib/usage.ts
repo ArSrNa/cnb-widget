@@ -11,14 +11,13 @@ export interface OrgUsage {
   chargeForbidden?: boolean;
   error?: string | null;
   credit?: UsageQuota | null;
+  gitStorage?: UsageQuota | null;
+  objectStorage?: UsageQuota | null;
   devCorehour?: UsageQuota | null;
   ciCorehour?: UsageQuota | null;
+  devGpuCorehour?: UsageQuota | null;
 }
-export const USAGE_DIMENSIONS = [
-  { key: "credit", label: "credit" },
-  { key: "devCorehour", label: "云原生开发核时" },
-  { key: "ciCorehour", label: "云原生构建核时" },
-] as const;
+export const USAGE_DIMENSIONS = USAGE_METRICS.map(({ dimension, label, unit }) => ({ key: dimension, label, unit }));
 export type UsageDimensionKey = (typeof USAGE_DIMENSIONS)[number]["key"];
 
 export function selectedUsage(orgs: OrgUsage[], settings: AppSettings) {

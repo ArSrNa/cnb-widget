@@ -2,15 +2,18 @@
 
 ## 1. 组织用量维度（2026-10-13 需求扩展）
 
-用量维度从单一 credit 扩展为**三维度**，悬浮球/刘海展示哪个组织哪个维度由主面板配置：
+组织用量覆盖六个维度，悬浮球/刘海展示哪个组织、维度及已用/剩余口径由设置页配置：
 
-| 维度 | 含义 | 接口字段 | 单位换算 |
-|---|---|---|---|
-| **credit** | 平台通用额度 | `credit_in_milli`（用量）/ `credit_in_milli.total`（额度） | milli ÷ 1000 = credit |
-| **云原生开发核时** | 云开发环境算力 | `dev_in_sec` / `dev_in_sec.total` | sec ÷ 3600 = 核时 |
-| **云原生构建核时** | CI 构建算力 | `ci_in_sec` / `ci_in_sec.total` | sec ÷ 3600 = 核时 |
+| 维度 | 接口字段（用量 / 额度 total） | 单位换算 |
+|---|---|---|
+| AI Credits | `credit_in_milli` | milli ÷ 1000 = Credits |
+| 代码仓库存储 | `git_in_byte` | byte ÷ 2³⁰ = GiB，不含 Git LFS |
+| 对象存储 | `object_in_byte` | byte ÷ 2³⁰ = GiB，含 Git LFS、制品、Release 和附件 |
+| 云原生构建-CPU | `ci_in_sec` | sec ÷ 3600 = 核时 |
+| 云原生开发-CPU | `dev_in_sec` | sec ÷ 3600 = 核时 |
+| 云原生开发-GPU | `dev_gpu_in_sec` | sec ÷ 3600 = 核时 |
 
-- 后续可扩展：GPU 核时（`dev_gpu_in_sec` / `ci_gpu_in_sec`）、存储（`object_in_byte` / `git_in_byte`）——接口字段已就绪，首版不做；
+- `ci_gpu_in_sec`（云原生构建 GPU）不在本次六项范围内；
 - **悬浮球/刘海 idle 口径（已确认，2026-10-13）**：
   - **单选组织 × 单选维度**：主面板指定一个组织与一个维度，悬浮球/刘海显示该组合的所选比例，默认剩余量 `max(0, 100% − 已用比例)`；设置页可切换已用量 `已用 / 总额度`，各窗口与详情页同步；气泡面板内查看全部组织明细；
   - 组织选项 = 组织白名单 ∩ owner 组织（成员组织 403 不可选）；所选组织数据缺失/403 时显示 `--`；
@@ -34,5 +37,5 @@
 ## 4. 已确认的权限结论（2026-10-13 更新）
 
 - ~~cnb-cli 内置 OAuth token 无 `group-resource:r`，charge 接口一律 403~~ → **实测修正**：内置 token 对 **owner 组织**可读 charge；仅成员组织仍 403（见 §1）；
-- 数据路线确认：`cnb charge get-volume`（本月用量）+ `get-quota`（月度额度）+ `get-special-amount`（特权额度，可选）即可覆盖三维度，**不再依赖构建日志聚合（原方案 A）作为默认**，其降级为 owner 组织 charge 不可用时的备选；
+- 数据路线确认：`cnb charge get-volume`（本月用量）+ `get-quota`（月度额度）+ `get-special-amount`（特权额度，可选）即可覆盖六维度，**不再依赖构建日志聚合（原方案 A）作为默认**，其降级为 owner 组织 charge 不可用时的备选；
 - NPC 观测数据：`/{org}/-/npc-observability/actions`（需 Reporter 及以上），作为 issue 评论状态的增强数据源（非必需）。
