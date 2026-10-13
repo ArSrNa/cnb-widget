@@ -2,7 +2,7 @@
 
 ## 定位
 
-macOS 常驻 widget，参考 CodexIsland 展示 Codex 用量的形态，聚合展示 **CNB 平台**的工作状态与资源用量。
+macOS、Windows、Linux 常驻 widget，参考 CodexIsland 展示 Codex 用量的形态，聚合展示 **CNB 平台**的工作状态与资源用量。
 
 ## 应用分区（2026-10-13 需求）
 

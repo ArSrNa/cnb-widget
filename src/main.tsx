@@ -4,6 +4,8 @@ import { RouterProvider } from "@tanstack/react-router";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import NotchApp from "./NotchApp";
 import FloatApp from "./FloatApp";
+import FloatDetailsApp from "./FloatDetailsApp";
+import { CnbProvider } from "./hooks/use-cnb";
 import { router } from "./router";
 import "./index.css";
 import "./App.css";
@@ -14,7 +16,8 @@ document.documentElement.classList.add("dark");
 // 同一前端包按窗口 label 路由：
 // - main  → 独立主面板窗口（TanStack Router 承载多页面）
 // - notch → 灵动岛（屏幕顶部，与物理刘海融合）
-// - float → 悬浮球（可拖动，点击打开面板）
+// - float → 悬浮球（可拖动，点击展开详情）
+// - float-details → 悬浮球旁的用量详情窗
 let label = "main";
 try {
   label = getCurrentWebviewWindow().label;
@@ -24,12 +27,16 @@ try {
 
 ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
   <React.StrictMode>
+    <CnbProvider>
     {label === "main" ? (
       <RouterProvider router={router} />
     ) : label === "float" ? (
       <FloatApp />
+    ) : label === "float-details" ? (
+      <FloatDetailsApp />
     ) : (
       <NotchApp />
     )}
+    </CnbProvider>
   </React.StrictMode>,
 );

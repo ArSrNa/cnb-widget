@@ -1,4 +1,6 @@
+mod auth;
 mod cli;
+mod data;
 mod settings;
 mod surface;
 
@@ -9,6 +11,7 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .manage(cli::CliState::default())
+        .manage(data::DataState::default())
         .setup(|app| {
             let handle = app.handle().clone();
 
@@ -36,11 +39,18 @@ pub fn run() {
             cli::cli_status,
             cli::cli_install,
             cli::cnb_call,
+            auth::auth_status,
+            auth::auth_save,
+            auth::auth_clear,
+            data::usage_get,
+            data::npc_get,
             surface::surface_resize,
             surface::notch_geometry,
             surface::panel_show,
             surface::float_nudge,
             surface::float_settle,
+            surface::float_details_show,
+            surface::float_details_hide,
             settings::settings_get,
             settings::settings_set_notch,
             settings::settings_set_float,

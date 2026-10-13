@@ -17,10 +17,25 @@ pub enum UsageMetric {
     #[default]
     #[serde(rename = "credit")]
     Credit,
+    #[serde(rename = "git-storage")]
+    GitStorage,
+    #[serde(rename = "object-storage")]
+    ObjectStorage,
     #[serde(rename = "dev-corehour")]
     DevCorehour,
     #[serde(rename = "ci-corehour")]
     CiCorehour,
+    #[serde(rename = "dev-gpu-corehour")]
+    DevGpuCorehour,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub enum UsageDisplay {
+    #[default]
+    #[serde(rename = "remaining")]
+    Remaining,
+    #[serde(rename = "used")]
+    Used,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -42,6 +57,7 @@ pub struct Settings {
     pub float_pos: Option<[f64; 2]>,
     pub usage_org: Option<String>,
     pub usage_metric: UsageMetric,
+    pub usage_display: UsageDisplay,
     pub notch_status: NotchStatus,
 }
 
@@ -53,6 +69,7 @@ impl Default for Settings {
             float_pos: None,
             usage_org: None,
             usage_metric: UsageMetric::default(),
+            usage_display: UsageDisplay::default(),
             notch_status: NotchStatus::default(),
         }
     }
@@ -94,6 +111,9 @@ fn sync(app: &AppHandle, s: &Settings) -> Result<(), String> {
         surface::show_float_window(app)?;
     } else if let Some(win) = app.get_webview_window(surface::FLOAT_LABEL) {
         let _ = win.hide();
+        if let Some(details) = app.get_webview_window(surface::FLOAT_DETAILS_LABEL) {
+            let _ = details.hide();
+        }
     }
     let _ = app.emit("settings-changed", s);
     Ok(())
@@ -132,6 +152,7 @@ pub fn settings_set_notch_content(
     app: AppHandle,
     usage_org: Option<String>,
     usage_metric: UsageMetric,
+    usage_display: UsageDisplay,
     notch_status: NotchStatus,
 ) -> Result<Settings, String> {
     if usage_org.as_ref().is_some_and(|org| org.trim().is_empty()) {
@@ -140,6 +161,7 @@ pub fn settings_set_notch_content(
     let mut s = load(&app);
     s.usage_org = usage_org;
     s.usage_metric = usage_metric;
+    s.usage_display = usage_display;
     s.notch_status = notch_status;
     save(&app, &s)?;
     app.emit("settings-changed", &s)
@@ -161,16 +183,18 @@ mod tests {
         assert_eq!(settings.float_pos, Some([12.0, 34.0]));
         let value = serde_json::to_value(settings).unwrap();
         assert_eq!(value["usageMetric"], "credit");
+        assert_eq!(value["usageDisplay"], "remaining");
         assert_eq!(value["notchStatus"], "NPC_WORKING");
     }
 
     #[test]
     fn content_settings_round_trip_and_reject_unknown_choices() {
-        let json =
-            r#"{"usageOrg":"1024hub","usageMetric":"ci-corehour","notchStatus":"NPC_REPLIED"}"#;
+        let json = r#"{"usageOrg":"1024hub","usageMetric":"ci-corehour","usageDisplay":"used","notchStatus":"NPC_REPLIED"}"#;
         let value = serde_json::to_value(serde_json::from_str::<Settings>(json).unwrap()).unwrap();
         assert_eq!(value["usageOrg"], "1024hub");
         assert_eq!(value["usageMetric"], "ci-corehour");
+        assert_eq!(value["usageDisplay"], "used");
+        assert!(serde_json::from_str::<Settings>(r#"{"usageDisplay":"UNKNOWN"}"#).is_err());
         assert_eq!(value["notchStatus"], "NPC_REPLIED");
         assert!(serde_json::from_str::<Settings>(r#"{"notchStatus":"UNKNOWN"}"#).is_err());
     }

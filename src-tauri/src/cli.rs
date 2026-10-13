@@ -8,9 +8,11 @@
 //!   `{status, data}` 信封 JSON；单次 15s 超时；全局串行化避免限流。
 //! - 错误分类：NotInstalled / NotLoggedIn / NoPermission / Other。
 
+use crate::auth;
 use serde::Serialize;
 use serde_json::Value;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::AtomicU64;
 use std::time::Duration;
 use tauri::{AppHandle, Emitter, Manager, State};
 use tokio::process::Command;
@@ -24,7 +26,8 @@ const DOWNLOAD_TIMEOUT_SECS: u64 = 300;
 #[derive(Default)]
 pub struct CliState {
     /// 所有 cnb-cli 调用串行化（spec §2.1：避免并发触发限流）
-    call_lock: Mutex<()>,
+    pub(crate) call_lock: Mutex<()>,
+    pub(crate) generation: AtomicU64,
 }
 
 // ---------------------------------------------------------------------------
@@ -65,9 +68,11 @@ async fn find_system_cli() -> Option<PathBuf> {
                 return Some(p);
             }
         }
-        let p = PathBuf::from(home).join(".cnb/bin/cnb");
-        if p.is_file() {
-            return Some(p);
+        for relative in [".cnb/bin/cnb", ".bun/bin/cnb", ".local/bin/cnb"] {
+            let p = PathBuf::from(&home).join(relative);
+            if p.is_file() {
+                return Some(p);
+            }
         }
         None
     }
@@ -86,16 +91,24 @@ async fn find_system_cli() -> Option<PathBuf> {
                 }
             }
         }
+        if let Ok(home) = std::env::var("USERPROFILE") {
+            for relative in [".bun/bin/cnb.exe", ".cnb/bin/cnb.exe", ".local/bin/cnb.exe"] {
+                let candidate = PathBuf::from(&home).join(relative);
+                if candidate.is_file() {
+                    return Some(candidate);
+                }
+            }
+        }
         None
     }
 }
 
 /// 当前应使用的 cnb 二进制：优先应用托管（appdata），其次系统
 async fn resolve_cli(app: &AppHandle) -> Option<(PathBuf, &'static str)> {
-    if let Ok(p) = managed_bin_path(app) {
-        if p.is_file() {
-            return Some((p, "managed"));
-        }
+    if let Ok(p) = managed_bin_path(app)
+        && p.is_file()
+    {
+        return Some((p, "managed"));
     }
     find_system_cli().await.map(|p| (p, "system"))
 }
@@ -116,24 +129,51 @@ pub struct CliOutput {
 }
 
 async fn run_cli(bin: &Path, args: &[String], timeout: Duration) -> Result<CliOutput, String> {
-    let fut = Command::new(bin).args(args).output();
+    let token = auth::current_token().await?;
+    run_cli_token(bin, args, timeout, token.as_deref()).await
+}
+
+async fn run_cli_token(
+    bin: &Path,
+    args: &[String],
+    timeout: Duration,
+    token: Option<&str>,
+) -> Result<CliOutput, String> {
+    let mut command = Command::new(bin);
+    command.args(args).kill_on_drop(true);
+    if let Some(token) = token {
+        command.env("CNB_TOKEN", token);
+    }
+    let fut = command.output();
     let out = tokio::time::timeout(timeout, fut)
         .await
         .map_err(|_| "调用超时".to_string())?
         .map_err(|e| format!("启动 cnb 子进程失败: {e}"))?;
 
-    let stdout = String::from_utf8_lossy(&out.stdout).to_string();
-    let stderr = String::from_utf8_lossy(&out.stderr).to_string();
+    let redact = |value: String| match token {
+        Some(token) => value.replace(token, "[REDACTED]"),
+        None => value,
+    };
+    let stdout = redact(String::from_utf8_lossy(&out.stdout).to_string());
+    let stderr = redact(String::from_utf8_lossy(&out.stderr).to_string());
     let lower = format!("{} {}", stderr, stdout).to_lowercase();
 
     // 失败模式识别（spec §2.1）
     let mut kind = "Other".to_string();
     if stderr.contains("not found") || stderr.contains("No such file") {
         kind = "NotInstalled".into();
-    } else if lower.contains("not logged in") || stderr.contains("请先登录") || lower.contains("请执行 cnb login") {
+    } else if lower.contains("not logged in")
+        || stderr.contains("请先登录")
+        || lower.contains("请执行 cnb login")
+    {
         kind = "NotLoggedIn".into();
     } else if lower.contains("has no permission") || lower.contains("only reporter") {
         kind = "NoPermission".into();
+    } else if lower.contains("unauthorized")
+        || lower.contains("token expired")
+        || lower.contains("未登录")
+    {
+        kind = "NotLoggedIn".into();
     }
 
     Ok(CliOutput {
@@ -147,28 +187,31 @@ async fn run_cli(bin: &Path, args: &[String], timeout: Duration) -> Result<CliOu
 
 /// 解析 `-v` 输出的 `{status, data}` 信封；成功时提取 `data`，按 HTTP 语义分类
 fn normalize(mut out: CliOutput) -> CliOutput {
-    if !out.ok {
-        return out;
-    }
     let Ok(v) = serde_json::from_str::<Value>(out.stdout.trim()) else {
-        out.kind = "Other".into();
+        out.ok = false;
         return out;
     };
     if let Some(status) = v.get("status").and_then(Value::as_u64) {
         if status == 200 {
+            out.ok = true;
             out.data = v.get("data").cloned();
             out.kind = "Normalized".into();
         } else if status == 403 {
             out.ok = false;
             out.kind = "NoPermission".into();
+        } else if status == 401 {
+            out.ok = false;
+            out.kind = "NotLoggedIn".into();
         } else {
             out.ok = false;
             out.kind = "Other".into();
             out.data = v.get("data").cloned();
         }
     } else {
-        out.data = Some(v);
-        out.kind = "Normalized".into();
+        if out.ok {
+            out.data = Some(v);
+            out.kind = "Normalized".into();
+        }
     }
     out
 }
@@ -301,18 +344,41 @@ pub async fn cnb_call(
     tool: String,
     args: Vec<String>,
 ) -> Result<CliOutput, String> {
-    let (bin, source) = resolve_cli(&app)
+    let _guard = state.call_lock.lock().await;
+    let token = auth::current_token().await?;
+    call_with_token(&app, &module, &tool, args, token.as_deref()).await
+}
+
+pub(crate) async fn call_with_token(
+    app: &AppHandle,
+    module: &str,
+    tool: &str,
+    args: Vec<String>,
+    token: Option<&str>,
+) -> Result<CliOutput, String> {
+    let (bin, _) = resolve_cli(app)
         .await
         .ok_or_else(|| "cnb-cli 未安装".to_string())?;
 
-    let mut argv: Vec<String> = vec![module, tool];
+    let mut argv: Vec<String> = vec![module.into(), tool.into()];
     argv.extend(args);
     argv.push("-v".into()); // 输出 {status, data} 信封 JSON（decision §3.1）
 
-    let _guard = state.call_lock.lock().await; // 串行化
-    let out = run_cli(&bin, &argv, CALL_TIMEOUT).await?;
-    let _ = source; // 仅用于日志/调试
+    let out = run_cli_token(&bin, &argv, CALL_TIMEOUT, token).await?;
     Ok(normalize(out))
+}
+
+pub(crate) fn require_data(out: CliOutput) -> Result<Value, String> {
+    if !out.ok {
+        return Err(match out.kind.as_str() {
+            "NotLoggedIn" => "认证失败：Token 无效或已过期，请在首页重新配置",
+            "NoPermission" => "权限不足：请检查 Token 的授权范围和组织角色",
+            "NotInstalled" => "cnb-cli 未安装，请在首页安装",
+            _ => "CNB 请求失败，请检查网络连接后重试",
+        }
+        .into());
+    }
+    out.data.ok_or_else(|| "CNB 返回的数据格式异常".into())
 }
 
 // ---------------------------------------------------------------------------
@@ -372,11 +438,14 @@ fn download_to(url: &str, dest: &Path, app: &AppHandle) -> Result<(), String> {
     let mut received: u64 = 0;
     let mut last_emit: u64 = 0;
     loop {
-        let n = reader.read(&mut buf).map_err(|e| format!("下载中断: {e}"))?;
+        let n = reader
+            .read(&mut buf)
+            .map_err(|e| format!("下载中断: {e}"))?;
         if n == 0 {
             break;
         }
-        file.write_all(&buf[..n]).map_err(|e| format!("写入失败: {e}"))?;
+        file.write_all(&buf[..n])
+            .map_err(|e| format!("写入失败: {e}"))?;
         received += n as u64;
         // 每 512KB 上报一次进度，减少事件风暴
         if received - last_emit >= 512 * 1024 || (total > 0 && received == total) {

@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useState } from "react";
 import { invoke, isTauri } from "@tauri-apps/api/core";
+import { openUrl } from "@tauri-apps/plugin-opener";
 import { AlertCircle, Settings } from "lucide-react";
 import { PageHeading } from "@/components/page-heading";
 import { UsageRing } from "@/components/usage-ring";
 import { StatusCount } from "@/components/status-count";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Field, FieldContent, FieldDescription, FieldGroup, FieldLabel, FieldSeparator } from "@/components/ui/field";
@@ -12,15 +14,20 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { listenDesktop } from "@/lib/desktop";
-import { MOCK_ISSUES, MOCK_ORGS } from "@/lib/mock";
-import { DEFAULT_SETTINGS, NOTCH_STATUSES, USAGE_METRICS, type AppSettings, type NotchGeometry } from "@/lib/settings";
+import { useNpc } from "@/hooks/use-npc";
+import { DEFAULT_SETTINGS, NOTCH_STATUSES, USAGE_DISPLAYS, USAGE_METRICS, type AppSettings, type NotchGeometry } from "@/lib/settings";
 import { selectedUsage } from "@/lib/usage";
+import { useCnb } from "@/hooks/use-cnb";
+import { TokenSettings } from "@/components/token-settings";
 import SetupView from "@/SetupView";
 
 export default function SettingsPage() {
+  const { data } = useCnb();
+  const { data: npcData } = useNpc();
   const desktop = isTauri();
   const [settings, setSettings] = useState<AppSettings | null>(desktop ? null : DEFAULT_SETTINGS);
   const [saving, setSaving] = useState(false);
+  const [footerError, setFooterError] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notchAvailable, setNotchAvailable] = useState<boolean | null>(desktop ? null : true);
 
@@ -48,7 +55,7 @@ export default function SettingsPage() {
     return () => { disposed = true; };
   }, [desktop]);
 
-  async function update(patch: Partial<Pick<AppSettings, "notchEnabled" | "floatEnabled" | "usageOrg" | "usageMetric" | "notchStatus">>) {
+  async function update(patch: Partial<Pick<AppSettings, "notchEnabled" | "floatEnabled" | "usageOrg" | "usageMetric" | "usageDisplay" | "notchStatus">>) {
     if (!settings || saving) return;
     const previous = settings;
     setSaving(true);
@@ -58,7 +65,7 @@ export default function SettingsPage() {
     try {
       const command = "notchEnabled" in patch ? "settings_set_notch" : "floatEnabled" in patch ? "settings_set_float" : "settings_set_notch_content";
       const args = "notchEnabled" in patch ? { enabled: next.notchEnabled } : "floatEnabled" in patch ? { enabled: next.floatEnabled }
-        : { usageOrg: next.usageOrg, usageMetric: next.usageMetric, notchStatus: next.notchStatus };
+        : { usageOrg: next.usageOrg, usageMetric: next.usageMetric, usageDisplay: next.usageDisplay, notchStatus: next.notchStatus };
       setSettings(await invoke<AppSettings>(command, args));
     } catch {
       setSettings(previous);
@@ -69,9 +76,9 @@ export default function SettingsPage() {
   }
 
   const disabled = !desktop || !settings || saving;
-  const usage = selectedUsage(MOCK_ORGS, settings ?? DEFAULT_SETTINGS);
+  const usage = selectedUsage(data.error ? [] : data.orgs, settings ?? DEFAULT_SETTINGS);
   const status = NOTCH_STATUSES.find((value) => value.key === settings?.notchStatus) ?? NOTCH_STATUSES[0];
-  const count = MOCK_ISSUES.filter((issue) => issue.state === status.key).length;
+  const count = !npcData.updatedAt || npcData.error || npcData.warnings.length > 0 ? null : npcData.issues.filter((issue) => issue.state === status.key).length;
   return (
     <>
       <PageHeading title="设置" description="管理桌面组件与 CNB 连接。" media={<Avatar size="lg"><AvatarFallback><Settings className="size-5" /></AvatarFallback></Avatar>} />
@@ -93,7 +100,7 @@ export default function SettingsPage() {
               <Field orientation="horizontal" data-disabled={disabled}>
                 <FieldContent>
                   <FieldLabel htmlFor="float-enabled">悬浮球</FieldLabel>
-                  <FieldDescription>显示可拖动的用量小球，点击打开工作台。</FieldDescription>
+                  <FieldDescription>显示可拖动的用量小球，点击查看所有可读组织的用量详情。</FieldDescription>
                 </FieldContent>
                 <Switch id="float-enabled" disabled={disabled} checked={settings?.floatEnabled ?? false} onCheckedChange={(value) => void update({ floatEnabled: value })} />
               </Field>
@@ -109,9 +116,9 @@ export default function SettingsPage() {
               <FieldLabel id="usage-org-label">用量组织</FieldLabel>
               <ToggleGroup type="single" variant="outline" spacing={2} className="flex-wrap" aria-labelledby="usage-org-label"
                 disabled={disabled} value={usage.org?.slug ?? ""} onValueChange={(value) => { if (value) void update({ usageOrg: value }); }}>
-                {MOCK_ORGS.map((org) => <ToggleGroupItem key={org.slug} value={org.slug} disabled={org.chargeForbidden}>{org.name}{org.chargeForbidden && "（无权限）"}</ToggleGroupItem>)}
+                {data.orgs.map((org) => <ToggleGroupItem key={org.slug} value={org.slug} disabled={org.chargeForbidden || !!org.error}>{org.name}{org.chargeForbidden && "（无权限）"}</ToggleGroupItem>)}
               </ToggleGroup>
-              <FieldDescription>只展示一个组织的用量百分比。</FieldDescription>
+              <FieldDescription>只展示一个可读取组织的真实用量；连接 CNB 后可选择组织。</FieldDescription>
             </Field>
             <Field data-disabled={disabled}>
               <FieldLabel id="usage-metric-label">用量类型</FieldLabel>
@@ -122,7 +129,18 @@ export default function SettingsPage() {
                 }}>
                 {USAGE_METRICS.map((metric) => <ToggleGroupItem key={metric.key} value={metric.key}>{metric.label}</ToggleGroupItem>)}
               </ToggleGroup>
-              <FieldDescription>外圈表示已用比例，内部显示数字；无权限或暂无数据时显示 --。</FieldDescription>
+              <FieldDescription>AI Credits 按 Credits、存储按 GiB、CPU/GPU 按核时统计。外圈与数字显示所选比例；无权限或暂无数据时显示 --。</FieldDescription>
+            </Field>
+            <Field data-disabled={disabled}>
+              <FieldLabel id="usage-display-label">展示口径</FieldLabel>
+              <ToggleGroup type="single" variant="outline" spacing={2} aria-labelledby="usage-display-label"
+                disabled={disabled} value={settings?.usageDisplay ?? "remaining"} onValueChange={(value) => {
+                  const display = USAGE_DISPLAYS.find((candidate) => candidate.key === value);
+                  if (display) void update({ usageDisplay: display.key });
+                }}>
+                {USAGE_DISPLAYS.map((display) => <ToggleGroupItem key={display.key} value={display.key}>{display.label}</ToggleGroupItem>)}
+              </ToggleGroup>
+              <FieldDescription>默认显示剩余比例，即 100% 减去已用比例。设置同时应用到悬浮球、刘海和用量详情，重启后保留。</FieldDescription>
             </Field>
             <FieldSeparator />
             <Field data-disabled={disabled}>
@@ -140,15 +158,28 @@ export default function SettingsPage() {
             <Field>
               <FieldLabel>展示预览</FieldLabel>
               <div className="flex items-center justify-between gap-4 rounded-xl bg-surface px-5 py-3 text-surface-foreground" aria-label="刘海展示预览">
-                <UsageRing percent={usage.percent} label={`${usage.org?.name ?? "组织不可用"} ${usage.metric.label}`} />
+                <UsageRing percent={usage.percent} warning={usage.warning} label={`${usage.org?.name ?? "组织不可用"} ${usage.metric.label} ${usage.display.label}`} />
                 <StatusCount count={count} label={status.label} />
               </div>
-              <FieldDescription>{usage.org?.name ?? "组织不可用"} · {usage.metric.label} · 当前为演示数据</FieldDescription>
+              <FieldDescription>{usage.org?.name ?? "组织不可用"} · {usage.metric.label} · {usage.display.label} · 真实数据</FieldDescription>
             </Field>
           </FieldGroup>
         </CardContent>
       </Card>
+      <TokenSettings />
       <SetupView />
+      {footerError && <Alert variant="destructive"><AlertCircle /><AlertTitle>无法打开网站</AlertTitle><AlertDescription>请在浏览器访问 https://www.arsrna.cn。</AlertDescription></Alert>}
+      <footer className="flex items-center justify-center gap-1 text-sm text-muted-foreground">
+        <span>Powered by</span>
+        <Button variant="link" size="sm" asChild>
+          <a href="https://www.arsrna.cn" target="_blank" rel="noopener noreferrer" onClick={(event) => {
+            if (!desktop) return;
+            event.preventDefault();
+            setFooterError(false);
+            void openUrl("https://www.arsrna.cn").catch(() => setFooterError(true));
+          }}>Ar-Sr-Na</a>
+        </Button>
+      </footer>
     </>
   );
 }

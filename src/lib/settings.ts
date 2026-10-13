@@ -1,9 +1,17 @@
 // 应用设置（与 src-tauri/src/settings.rs 的 Settings 对齐）
 
 export const USAGE_METRICS = [
-  { key: "credit", dimension: "credit", label: "credit" },
-  { key: "dev-corehour", dimension: "devCorehour", label: "云原生开发核时" },
-  { key: "ci-corehour", dimension: "ciCorehour", label: "云原生构建核时" },
+  { key: "credit", dimension: "credit", label: "AI Credits", unit: "Credits" },
+  { key: "git-storage", dimension: "gitStorage", label: "代码仓库存储", unit: "GiB" },
+  { key: "object-storage", dimension: "objectStorage", label: "对象存储", unit: "GiB" },
+  { key: "ci-corehour", dimension: "ciCorehour", label: "云原生构建-CPU", unit: "核时" },
+  { key: "dev-corehour", dimension: "devCorehour", label: "云原生开发-CPU", unit: "核时" },
+  { key: "dev-gpu-corehour", dimension: "devGpuCorehour", label: "云原生开发-GPU", unit: "核时" },
+] as const;
+
+export const USAGE_DISPLAYS = [
+  { key: "remaining", label: "剩余量" },
+  { key: "used", label: "已用量" },
 ] as const;
 
 export const NOTCH_STATUSES = [
@@ -13,6 +21,7 @@ export const NOTCH_STATUSES = [
 ] as const;
 
 export type UsageMetric = (typeof USAGE_METRICS)[number]["key"];
+export type UsageDisplay = (typeof USAGE_DISPLAYS)[number]["key"];
 export type NotchStatus = (typeof NOTCH_STATUSES)[number]["key"];
 
 export interface NotchGeometry {
@@ -30,6 +39,7 @@ export interface AppSettings {
   floatPos: [number, number] | null;
   usageOrg: string | null;
   usageMetric: UsageMetric;
+  usageDisplay: UsageDisplay;
   notchStatus: NotchStatus;
 }
 
@@ -39,5 +49,6 @@ export const DEFAULT_SETTINGS: AppSettings = {
   floatPos: null,
   usageOrg: null,
   usageMetric: "credit",
+  usageDisplay: "remaining",
   notchStatus: "NPC_WORKING",
 };
