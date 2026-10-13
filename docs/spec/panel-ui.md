@@ -5,7 +5,7 @@
 
 ## 1. 布局骨架
 
-- 主面板为独立窗口（label `main`，780×560，最小 620×460）。
+- 主面板为独立窗口（label `main`，1000×600，最小 1000×600）。
 - 左侧 shadcn `Sidebar` 固定 208px，`collapsible="none"`，显式 `shrink-0 border-r`；品牌在 SidebarHeader，一级导航在 SidebarContent，数据状态在 SidebarFooter。
 - 右侧 SidebarInset 使用 `min-h-0 min-w-0`，ScrollArea 高度限制在窗口内；路由切换后滚动回顶部。
 - 内容区最大宽度 896px，窄窗口 padding 16px，窗口宽度 ≥740px 时 padding 24px，区块间 gap 24px。
@@ -62,7 +62,7 @@
 
 ## 6. 验收
 
-1. 780×560 与 620×460 保留左右布局，内容独立滚动，无横向溢出。
+1. 1000×600（窗口最小尺寸）保留左右布局，内容独立滚动，无横向溢出。
 2. 页面、卡片、列表、导航与表单均有实际生效的 padding / gap。
 3. 组织切换、子菜单展开、NPC 筛选、设置和连接交互正常。
 4. 空态、错误态和加载态使用组件库，文案不误导用户。

@@ -12,12 +12,37 @@ use tauri::{AppHandle, Emitter, Manager};
 
 use crate::surface;
 
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub enum UsageMetric {
+    #[default]
+    #[serde(rename = "credit")]
+    Credit,
+    #[serde(rename = "dev-corehour")]
+    DevCorehour,
+    #[serde(rename = "ci-corehour")]
+    CiCorehour,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub enum NotchStatus {
+    #[default]
+    #[serde(rename = "NPC_WORKING")]
+    Working,
+    #[serde(rename = "NPC_REPLIED")]
+    Replied,
+    #[serde(rename = "NPC_FAILED")]
+    Failed,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
 pub struct Settings {
     pub notch_enabled: bool,
     pub float_enabled: bool,
     pub float_pos: Option<[f64; 2]>,
+    pub usage_org: Option<String>,
+    pub usage_metric: UsageMetric,
+    pub notch_status: NotchStatus,
 }
 
 impl Default for Settings {
@@ -26,6 +51,9 @@ impl Default for Settings {
             notch_enabled: true,
             float_enabled: true,
             float_pos: None,
+            usage_org: None,
+            usage_metric: UsageMetric::default(),
+            notch_status: NotchStatus::default(),
         }
     }
 }
@@ -97,4 +125,53 @@ pub fn settings_set_float(app: AppHandle, enabled: bool) -> Result<Settings, Str
     s.float_enabled = enabled;
     sync(&app, &s)?;
     Ok(s)
+}
+
+#[tauri::command]
+pub fn settings_set_notch_content(
+    app: AppHandle,
+    usage_org: Option<String>,
+    usage_metric: UsageMetric,
+    notch_status: NotchStatus,
+) -> Result<Settings, String> {
+    if usage_org.as_ref().is_some_and(|org| org.trim().is_empty()) {
+        return Err("请选择有效组织".into());
+    }
+    let mut s = load(&app);
+    s.usage_org = usage_org;
+    s.usage_metric = usage_metric;
+    s.notch_status = notch_status;
+    save(&app, &s)?;
+    app.emit("settings-changed", &s)
+        .map_err(|e| format!("同步刘海设置失败: {e}"))?;
+    Ok(s)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn old_settings_keep_display_preferences_and_default_content() {
+        let settings: Settings = serde_json::from_str(
+            r#"{"notchEnabled":false,"floatEnabled":true,"floatPos":[12,34]}"#,
+        )
+        .unwrap();
+        assert!(!settings.notch_enabled);
+        assert_eq!(settings.float_pos, Some([12.0, 34.0]));
+        let value = serde_json::to_value(settings).unwrap();
+        assert_eq!(value["usageMetric"], "credit");
+        assert_eq!(value["notchStatus"], "NPC_WORKING");
+    }
+
+    #[test]
+    fn content_settings_round_trip_and_reject_unknown_choices() {
+        let json =
+            r#"{"usageOrg":"1024hub","usageMetric":"ci-corehour","notchStatus":"NPC_REPLIED"}"#;
+        let value = serde_json::to_value(serde_json::from_str::<Settings>(json).unwrap()).unwrap();
+        assert_eq!(value["usageOrg"], "1024hub");
+        assert_eq!(value["usageMetric"], "ci-corehour");
+        assert_eq!(value["notchStatus"], "NPC_REPLIED");
+        assert!(serde_json::from_str::<Settings>(r#"{"notchStatus":"UNKNOWN"}"#).is_err());
+    }
 }

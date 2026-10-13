@@ -1,16 +1,19 @@
 import { useRef, type PointerEvent } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { Button } from "@/components/ui/button";
-import { Progress } from "@/components/ui/progress";
+import { UsageRing } from "@/components/usage-ring";
+import { useSurfaceSettings } from "@/hooks/use-surface-settings";
 import { MOCK_ORGS } from "@/lib/mock";
-import { creditSummary } from "@/lib/usage";
+import { selectedUsage } from "@/lib/usage";
 
 const CLICK_THRESHOLD = 6;
 
 export default function FloatApp() {
   const drag = useRef({ active: false, moved: 0, lastX: 0, lastY: 0 });
   const chain = useRef<Promise<unknown>>(Promise.resolve());
-  const summary = creditSummary(MOCK_ORGS);
+  const settings = useSurfaceSettings();
+  const usage = selectedUsage(MOCK_ORGS, settings);
+  const label = `${usage.org?.name ?? "组织不可用"} · ${usage.metric.label}`;
 
   function endDrag(event: PointerEvent<HTMLButtonElement>) {
     if (!drag.current.active) return;
@@ -23,7 +26,7 @@ export default function FloatApp() {
 
   return (
     <div className="grid size-full place-items-center p-1">
-      <Button size="float" aria-label={`CNB credit 用量 ${summary ?? "未知"}%，点击打开工作台，拖动调整位置`}
+      <Button variant="surface" size="float" aria-label={`${label} ${usage.percent ?? "未知"}%，点击打开工作台，拖动调整位置`}
         onPointerDown={(event) => {
           if (event.button !== 0) return;
           event.currentTarget.setPointerCapture(event.pointerId);
@@ -41,8 +44,7 @@ export default function FloatApp() {
         }}
         onPointerUp={endDrag} onPointerCancel={endDrag}
         onClick={(event) => { if (event.detail === 0 || drag.current.moved < CLICK_THRESHOLD) void invoke("panel_show").catch(() => {}); }}>
-        <span className="text-xs tabular-nums">{summary === null ? "—" : `${summary}%`}</span>
-        <Progress className="h-1 w-8" value={summary === null ? 0 : Math.min(100, summary)} aria-label="credit 用量" />
+        <UsageRing percent={usage.percent} label={label} />
       </Button>
     </div>
   );

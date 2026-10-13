@@ -4,50 +4,118 @@
 //! - `float`：悬浮球，可拖动，位置持久化到 settings
 //! - 两者均由面板内开关独立控制显隐；点击任意表面唤起主面板窗口。
 
+#[cfg(not(target_os = "macos"))]
+use tauri::LogicalSize;
 use tauri::{
-    AppHandle, LogicalSize, Manager, PhysicalPosition, WebviewUrl, WebviewWindow, WebviewWindowBuilder,
+    AppHandle, Manager, PhysicalPosition, WebviewUrl, WebviewWindow, WebviewWindowBuilder,
 };
+
+#[cfg(target_os = "macos")]
+mod macos;
+
+const NOTCH_WING_WIDTH: f64 = 64.0;
+
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NotchGeometry {
+    pub available: bool,
+    pub notch_width: f64,
+    pub menu_bar_height: f64,
+}
+
+impl Default for NotchGeometry {
+    fn default() -> Self {
+        Self {
+            available: false,
+            notch_width: 184.0,
+            menu_bar_height: 32.0,
+        }
+    }
+}
+
+#[tauri::command]
+pub fn notch_geometry(app: AppHandle) -> Result<NotchGeometry, String> {
+    #[cfg(target_os = "macos")]
+    {
+        macos::geometry(&app)
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = app;
+        Ok(NotchGeometry::default())
+    }
+}
 
 pub const NOTCH_LABEL: &str = "notch";
 pub const FLOAT_LABEL: &str = "float";
 
-/// 灵动岛空闲尺寸（逻辑像素）：略宽于物理刘海，与菜单栏同高
-pub const NOTCH_IDLE_SIZE: (f64, f64) = (360.0, 32.0);
 /// 悬浮球窗口尺寸（逻辑像素）
 pub const FLOAT_SIZE: (f64, f64) = (64.0, 64.0);
 
 /// 将窗口调整为指定逻辑尺寸，并保持水平居中、贴住屏幕顶部。
 #[tauri::command]
 pub fn surface_resize(window: WebviewWindow, width: f64, height: f64) -> Result<(), String> {
-    let monitor = window
-        .current_monitor()
-        .map_err(|e| format!("获取显示器失败: {e}"))?
-        .ok_or("无可用显示器")?;
-    let scale = monitor.scale_factor();
-    let msize = monitor.size();
+    if window.label() != NOTCH_LABEL
+        || !width.is_finite()
+        || !height.is_finite()
+        || !(176.0..=1024.0).contains(&width)
+        || !(24.0..=480.0).contains(&height)
+    {
+        return Err("无效的刘海窗口尺寸".into());
+    }
+    #[cfg(target_os = "macos")]
+    {
+        macos::place(&window, width, height)
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        let monitor = window
+            .current_monitor()
+            .map_err(|e| format!("获取显示器失败: {e}"))?
+            .ok_or("无可用显示器")?;
+        let scale = monitor.scale_factor();
+        let msize = monitor.size();
 
-    let w = (width * scale) as i32;
-    let x = ((msize.width as i32) - w) / 2;
+        let w = (width * scale) as i32;
+        let origin = monitor.position();
+        let x = origin.x + ((msize.width as i32) - w) / 2;
 
-    window
-        .set_size(LogicalSize::new(width, height))
-        .map_err(|e| format!("调整窗口尺寸失败: {e}"))?;
-    window
-        .set_position(PhysicalPosition::new(x.max(0), 0))
-        .map_err(|e| format!("调整窗口位置失败: {e}"))?;
-    Ok(())
+        window
+            .set_size(LogicalSize::new(width, height))
+            .map_err(|e| format!("调整窗口尺寸失败: {e}"))?;
+        window
+            .set_position(PhysicalPosition::new(x, origin.y))
+            .map_err(|e| format!("调整窗口位置失败: {e}"))?;
+        Ok(())
+    }
 }
 
 /// 创建（或复用）并显示灵动岛窗口（主屏顶部居中）
 pub fn show_notch_window(app: &AppHandle) -> Result<(), String> {
+    let geometry = notch_geometry(app.clone())?;
+    if !geometry.available {
+        if let Some(existing) = app.get_webview_window(NOTCH_LABEL) {
+            existing
+                .hide()
+                .map_err(|e| format!("隐藏灵动刘海失败: {e}"))?;
+        }
+        return Ok(());
+    }
+    let width = geometry.notch_width + NOTCH_WING_WIDTH * 2.0;
+    let height = geometry.menu_bar_height;
     if let Some(existing) = app.get_webview_window(NOTCH_LABEL) {
-        existing.show().map_err(|e| format!("显示灵动岛失败: {e}"))?;
+        surface_resize(existing.clone(), width, height)?;
+        if !existing.is_visible().map_err(|e| e.to_string())? {
+            existing
+                .show()
+                .map_err(|e| format!("显示灵动岛失败: {e}"))?;
+        }
         return Ok(());
     }
 
     let win = WebviewWindowBuilder::new(app, NOTCH_LABEL, WebviewUrl::default())
         .title("cnb-widget")
-        .inner_size(NOTCH_IDLE_SIZE.0, NOTCH_IDLE_SIZE.1)
+        .inner_size(width, height)
         .visible(false)
         .transparent(true)
         .decorations(false)
@@ -59,13 +127,7 @@ pub fn show_notch_window(app: &AppHandle) -> Result<(), String> {
         .build()
         .map_err(|e| format!("创建灵动岛窗口失败: {e}"))?;
 
-    // 主屏顶部居中（物理刘海位于主屏）
-    if let Ok(Some(monitor)) = app.primary_monitor() {
-        let scale = monitor.scale_factor();
-        let w = (NOTCH_IDLE_SIZE.0 * scale) as i32;
-        let x = ((monitor.size().width as i32) - w) / 2;
-        let _ = win.set_position(PhysicalPosition::new(x.max(0), 0));
-    }
+    surface_resize(win.clone(), width, height)?;
 
     win.show().map_err(|e| format!("显示灵动岛失败: {e}"))?;
     Ok(())
@@ -74,7 +136,11 @@ pub fn show_notch_window(app: &AppHandle) -> Result<(), String> {
 /// 创建（或复用）并显示悬浮球窗口（默认主屏右侧，拖动后位置持久化）
 pub fn show_float_window(app: &AppHandle) -> Result<(), String> {
     if let Some(existing) = app.get_webview_window(FLOAT_LABEL) {
-        existing.show().map_err(|e| format!("显示悬浮球失败: {e}"))?;
+        if !existing.is_visible().map_err(|e| e.to_string())? {
+            existing
+                .show()
+                .map_err(|e| format!("显示悬浮球失败: {e}"))?;
+        }
         return Ok(());
     }
 
@@ -147,9 +213,7 @@ pub fn float_settle(app: AppHandle, window: WebviewWindow) -> Result<(), String>
 /// 显示并聚焦主面板窗口（灵动岛/悬浮球点击时调用）
 #[tauri::command]
 pub fn panel_show(app: AppHandle) -> Result<(), String> {
-    let win = app
-        .get_webview_window("main")
-        .ok_or("主面板窗口不存在")?;
+    let win = app.get_webview_window("main").ok_or("主面板窗口不存在")?;
     let _ = win.unminimize();
     let _ = win.show();
     let _ = win.set_focus();

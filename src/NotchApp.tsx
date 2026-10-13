@@ -1,86 +1,98 @@
-import { useCallback, useEffect, useRef, useState } from "react";
-import { invoke } from "@tauri-apps/api/core";
+import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
+import { invoke, isTauri } from "@tauri-apps/api/core";
 import { IssueBadge } from "@/components/issue-badge";
-import { Badge } from "@/components/ui/badge";
+import { UsageRing } from "@/components/usage-ring";
+import { StatusCount } from "@/components/status-count";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
-import { Separator } from "@/components/ui/separator";
-import { listenDesktop } from "@/lib/desktop";
-import { MOCK_ISSUES, MOCK_ORGS, type IssueState } from "@/lib/mock";
-import { creditSummary, usagePercent } from "@/lib/usage";
-import { cn } from "@/lib/utils";
+import { useSurfaceSettings } from "@/hooks/use-surface-settings";
+import { MOCK_ISSUES, MOCK_ORGS } from "@/lib/mock";
+import { NOTCH_STATUSES, type NotchGeometry } from "@/lib/settings";
+import { selectedUsage, usagePercent } from "@/lib/usage";
 
-const SIZE = {
-  idle: { width: 360, height: 32 },
-  peek: { width: 520, height: 180 },
-} as const;
-type Phase = keyof typeof SIZE;
+const PREVIEW_GEOMETRY: NotchGeometry = { available: true, notchWidth: 184, menuBarHeight: 32 };
+const WING_WIDTH = 64;
+type Phase = "idle" | "peek";
 
 export default function NotchApp() {
+  const settings = useSurfaceSettings();
+  const [geometry, setGeometry] = useState(PREVIEW_GEOMETRY);
   const [phase, setPhase] = useState<Phase>("idle");
-  const phaseRef = useRef<Phase>("idle");
-  const resize = useCallback((next: Phase) => {
-    void invoke("surface_resize", SIZE[next]).catch(() => {});
+  const closeTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const idleWidth = geometry.notchWidth + WING_WIDTH * 2;
+  const peekWidth = Math.max(520, idleWidth);
+
+  useEffect(() => {
+    if (!isTauri()) return;
+    let disposed = false;
+    void invoke<NotchGeometry>("notch_geometry").then((value) => {
+      if (!disposed) setGeometry(value);
+    }).catch(() => {});
+    return () => { disposed = true; };
   }, []);
-  const enter = useCallback((next: Phase) => {
-    if (phaseRef.current === next) return;
-    phaseRef.current = next;
-    setPhase(next);
-    resize(next);
-  }, [resize]);
 
   useEffect(() => {
-    resize("idle");
-    return listenDesktop("settings-changed", () => {
-      phaseRef.current = "idle";
-      setPhase("idle");
-      resize("idle");
-    });
-  }, [resize]);
+    if (!isTauri()) return;
+    void invoke("surface_resize", {
+      width: phase === "idle" ? idleWidth : peekWidth,
+      height: geometry.menuBarHeight + (phase === "peek" ? 200 : 0),
+    }).catch(() => {});
+  }, [phase, geometry, idleWidth, peekWidth]);
 
+  const close = useCallback(() => {
+    clearTimeout(closeTimer.current);
+    setPhase("idle");
+  }, []);
+  useEffect(() => { close(); }, [settings, close]);
   useEffect(() => {
-    const onKey = (event: KeyboardEvent) => { if (event.key === "Escape") enter("idle"); };
+    const onKey = (event: KeyboardEvent) => { if (event.key === "Escape") close(); };
     window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [enter]);
+    return () => { window.removeEventListener("keydown", onKey); clearTimeout(closeTimer.current); };
+  }, [close]);
 
-  const summary = creditSummary(MOCK_ORGS);
-  const states: IssueState[] = ["NPC_WORKING", "NPC_REPLIED", "NPC_FAILED"];
+  const usage = selectedUsage(MOCK_ORGS, settings);
+  const status = NOTCH_STATUSES.find((value) => value.key === settings.notchStatus) ?? NOTCH_STATUSES[0];
+  const count = MOCK_ISSUES.filter((issue) => issue.state === status.key).length;
+  const label = `${usage.org?.name ?? "组织不可用"} · ${usage.metric.label}`;
 
   return (
-    <Button variant="surface" size={phase === "peek" ? "notch" : "sm"} className={cn(phase === "idle" && "h-full w-full justify-between rounded-t-none rounded-b-xl px-4")}
-      onMouseEnter={() => enter("peek")} onMouseLeave={() => enter("idle")}
-      onFocus={() => enter("peek")} onBlur={() => enter("idle")}
-      onClick={() => void invoke("panel_show").catch(() => {})}
-      aria-label="CNB 用量概览，点击打开工作台">
-      {phase === "idle" ? (
-        <>
-          <span className="flex items-center gap-2"><span>CNB</span><Badge variant="secondary">{summary === null ? "—" : `${summary}%`}</Badge></span>
-          <span className="flex items-center gap-2">
-            {states.map((state) => <Badge key={state} variant={state === "NPC_FAILED" ? "destructive" : "secondary"} aria-label={state}>{MOCK_ISSUES.filter((issue) => issue.state === state).length}</Badge>)}
-          </span>
-        </>
-      ) : (
-        <>
-          <span className="flex flex-col gap-3">
+    <div className="notch-surface" data-phase={phase}
+      style={{ "--notch-width": `${geometry.notchWidth}px`, "--notch-height": `${geometry.menuBarHeight}px`, "--notch-wing-width": `${WING_WIDTH}px` } as CSSProperties}
+      onMouseEnter={() => { clearTimeout(closeTimer.current); setPhase("peek"); }}
+      onMouseLeave={() => { closeTimer.current = setTimeout(close, 140); }}
+      onFocusCapture={() => { clearTimeout(closeTimer.current); setPhase("peek"); }}
+      onBlurCapture={(event) => { if (!event.currentTarget.contains(event.relatedTarget)) close(); }}>
+      <button className="notch-header" type="button"
+        onClick={() => setPhase("peek")} aria-expanded={phase === "peek"} aria-controls="notch-details"
+        aria-label={`${label} ${usage.percent === null ? "暂无数据" : `${usage.percent}%`}，${status.label}：${count}，展开刘海详情`}>
+        <span className="notch-usage"><UsageRing compact percent={usage.percent} label={label} /></span>
+        <span className="notch-camera" aria-hidden="true" />
+        <span className="notch-status"><StatusCount compact count={count} label={status.label} /></span>
+      </button>
+      {phase === "peek" && (
+        <div className="notch-overview" id="notch-details">
+          <div className="flex items-center justify-between gap-3 text-xs">
+            <span>{usage.metric.label} · 组织概览</span>
+            <span className="text-muted-foreground">{usage.org?.name ?? "组织不可用"}</span>
+          </div>
+          <div className="flex flex-col gap-2">
             {MOCK_ORGS.map((org) => {
-              const percent = org.chargeForbidden ? null : usagePercent(org.credit);
+              const percent = org.chargeForbidden ? null : usagePercent(org[usage.metric.dimension]);
               return (
-                <span key={org.slug} className="grid grid-cols-[7rem_minmax(0,1fr)_4rem] items-center gap-3">
-                  <span className="truncate text-xs">{org.name}</span>
-                  <Progress value={percent === null ? 0 : Math.min(100, percent)} aria-label={`${org.name} credit 用量`} />
-                  <span className="text-right text-xs tabular-nums">{org.chargeForbidden ? "无权限" : percent === null ? "—" : `${percent}%`}</span>
-                </span>
+                <div key={org.slug} className="grid grid-cols-[7rem_minmax(0,1fr)_4rem] items-center gap-3 text-xs">
+                  <span className="truncate">{org.name}</span>
+                  <Progress value={Math.min(100, percent ?? 0)} aria-label={`${org.name} ${usage.metric.label} 用量`} />
+                  <span className="text-right tabular-nums">{org.chargeForbidden ? "无权限" : percent === null ? "--" : `${percent}%`}</span>
+                </div>
               );
             })}
-          </span>
-          <Separator />
-          <span className="flex flex-wrap items-center justify-between gap-2">
-            <span className="flex items-center gap-2">{states.map((state) => <IssueBadge key={state} state={state} count={MOCK_ISSUES.filter((issue) => issue.state === state).length} />)}</span>
-            <span className="text-xs">打开工作台</span>
-          </span>
-        </>
+          </div>
+          <div className="flex items-center justify-between gap-2">
+            <span className="flex items-center gap-2">{NOTCH_STATUSES.map(({ key }) => <IssueBadge key={key} state={key} count={MOCK_ISSUES.filter((issue) => issue.state === key).length} />)}</span>
+            <Button size="xs" variant="secondary" onClick={() => { close(); void invoke("panel_show").catch(() => {}); }}>打开工作台</Button>
+          </div>
+        </div>
       )}
-    </Button>
+    </div>
   );
 }

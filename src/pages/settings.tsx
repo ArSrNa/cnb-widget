@@ -2,14 +2,19 @@ import { useCallback, useEffect, useState } from "react";
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import { AlertCircle, Settings } from "lucide-react";
 import { PageHeading } from "@/components/page-heading";
+import { UsageRing } from "@/components/usage-ring";
+import { StatusCount } from "@/components/status-count";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Field, FieldContent, FieldDescription, FieldGroup, FieldLabel, FieldSeparator } from "@/components/ui/field";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { listenDesktop } from "@/lib/desktop";
-import { DEFAULT_SETTINGS, type AppSettings } from "@/lib/settings";
+import { MOCK_ISSUES, MOCK_ORGS } from "@/lib/mock";
+import { DEFAULT_SETTINGS, NOTCH_STATUSES, USAGE_METRICS, type AppSettings, type NotchGeometry } from "@/lib/settings";
+import { selectedUsage } from "@/lib/usage";
 import SetupView from "@/SetupView";
 
 export default function SettingsPage() {
@@ -17,6 +22,7 @@ export default function SettingsPage() {
   const [settings, setSettings] = useState<AppSettings | null>(desktop ? null : DEFAULT_SETTINGS);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [notchAvailable, setNotchAvailable] = useState<boolean | null>(desktop ? null : true);
 
   const reload = useCallback(async () => {
     if (!isTauri()) return;
@@ -33,23 +39,39 @@ export default function SettingsPage() {
     return listenDesktop<AppSettings>("settings-changed", (event) => setSettings(event.payload));
   }, [reload]);
 
-  async function update(key: "notchEnabled" | "floatEnabled", enabled: boolean) {
+  useEffect(() => {
+    if (!desktop) return;
+    let disposed = false;
+    void invoke<NotchGeometry>("notch_geometry").then(({ available }) => {
+      if (!disposed) setNotchAvailable(available);
+    }).catch(() => { if (!disposed) setNotchAvailable(false); });
+    return () => { disposed = true; };
+  }, [desktop]);
+
+  async function update(patch: Partial<Pick<AppSettings, "notchEnabled" | "floatEnabled" | "usageOrg" | "usageMetric" | "notchStatus">>) {
     if (!settings || saving) return;
     const previous = settings;
     setSaving(true);
     setError(null);
-    setSettings({ ...settings, [key]: enabled });
+    const next = { ...settings, ...patch };
+    setSettings(next);
     try {
-      setSettings(await invoke<AppSettings>(key === "notchEnabled" ? "settings_set_notch" : "settings_set_float", { enabled }));
+      const command = "notchEnabled" in patch ? "settings_set_notch" : "floatEnabled" in patch ? "settings_set_float" : "settings_set_notch_content";
+      const args = "notchEnabled" in patch ? { enabled: next.notchEnabled } : "floatEnabled" in patch ? { enabled: next.floatEnabled }
+        : { usageOrg: next.usageOrg, usageMetric: next.usageMetric, notchStatus: next.notchStatus };
+      setSettings(await invoke<AppSettings>(command, args));
     } catch {
       setSettings(previous);
-      setError("保存失败，已恢复之前的显示设置，请重试。");
+      setError("保存失败，已恢复之前的设置，请重试。");
     } finally {
       setSaving(false);
     }
   }
 
   const disabled = !desktop || !settings || saving;
+  const usage = selectedUsage(MOCK_ORGS, settings ?? DEFAULT_SETTINGS);
+  const status = NOTCH_STATUSES.find((value) => value.key === settings?.notchStatus) ?? NOTCH_STATUSES[0];
+  const count = MOCK_ISSUES.filter((issue) => issue.state === status.key).length;
   return (
     <>
       <PageHeading title="设置" description="管理桌面组件与 CNB 连接。" media={<Avatar size="lg"><AvatarFallback><Settings className="size-5" /></AvatarFallback></Avatar>} />
@@ -60,12 +82,12 @@ export default function SettingsPage() {
           {error && <Alert variant="destructive"><AlertCircle /><AlertTitle>设置未保存</AlertTitle><AlertDescription>{error}</AlertDescription></Alert>}
           {!settings && !error ? <div className="flex flex-col gap-6" aria-label="正在读取显示设置"><Skeleton className="h-14 w-full" /><Skeleton className="h-14 w-full" /></div> : (
             <FieldGroup>
-              <Field orientation="horizontal" data-disabled={disabled}>
+              <Field orientation="horizontal" data-disabled={disabled || !notchAvailable}>
                 <FieldContent>
                   <FieldLabel htmlFor="notch-enabled">灵动刘海</FieldLabel>
-                  <FieldDescription>在屏幕顶部显示用量，悬停展开组织概览。</FieldDescription>
+                  <FieldDescription>{notchAvailable === null ? "正在检测刘海屏…" : !notchAvailable ? "仅支持内建刘海屏，当前没有可用的刘海屏。" : "贴合菜单栏刘海两侧，左侧显示用量环，右侧显示所选状态数量。"}</FieldDescription>
                 </FieldContent>
-                <Switch id="notch-enabled" disabled={disabled} checked={settings?.notchEnabled ?? false} onCheckedChange={(value) => void update("notchEnabled", value)} />
+                <Switch id="notch-enabled" disabled={disabled || !notchAvailable} checked={(settings?.notchEnabled ?? false) && !!notchAvailable} onCheckedChange={(value) => void update({ notchEnabled: value })} />
               </Field>
               <FieldSeparator />
               <Field orientation="horizontal" data-disabled={disabled}>
@@ -73,10 +95,57 @@ export default function SettingsPage() {
                   <FieldLabel htmlFor="float-enabled">悬浮球</FieldLabel>
                   <FieldDescription>显示可拖动的用量小球，点击打开工作台。</FieldDescription>
                 </FieldContent>
-                <Switch id="float-enabled" disabled={disabled} checked={settings?.floatEnabled ?? false} onCheckedChange={(value) => void update("floatEnabled", value)} />
+                <Switch id="float-enabled" disabled={disabled} checked={settings?.floatEnabled ?? false} onCheckedChange={(value) => void update({ floatEnabled: value })} />
               </Field>
             </FieldGroup>
           )}
+        </CardContent>
+      </Card>
+      <Card>
+        <CardHeader><CardTitle>刘海展示</CardTitle><CardDescription>选择左侧用量和右侧状态，保存后即时生效。悬浮球使用相同的用量设置。</CardDescription></CardHeader>
+        <CardContent>
+          <FieldGroup>
+            <Field data-disabled={disabled}>
+              <FieldLabel id="usage-org-label">用量组织</FieldLabel>
+              <ToggleGroup type="single" variant="outline" spacing={2} className="flex-wrap" aria-labelledby="usage-org-label"
+                disabled={disabled} value={usage.org?.slug ?? ""} onValueChange={(value) => { if (value) void update({ usageOrg: value }); }}>
+                {MOCK_ORGS.map((org) => <ToggleGroupItem key={org.slug} value={org.slug} disabled={org.chargeForbidden}>{org.name}{org.chargeForbidden && "（无权限）"}</ToggleGroupItem>)}
+              </ToggleGroup>
+              <FieldDescription>只展示一个组织的用量百分比。</FieldDescription>
+            </Field>
+            <Field data-disabled={disabled}>
+              <FieldLabel id="usage-metric-label">用量类型</FieldLabel>
+              <ToggleGroup type="single" variant="outline" spacing={2} className="flex-wrap" aria-labelledby="usage-metric-label"
+                disabled={disabled} value={settings?.usageMetric ?? "credit"} onValueChange={(value) => {
+                  const metric = USAGE_METRICS.find((candidate) => candidate.key === value);
+                  if (metric) void update({ usageMetric: metric.key });
+                }}>
+                {USAGE_METRICS.map((metric) => <ToggleGroupItem key={metric.key} value={metric.key}>{metric.label}</ToggleGroupItem>)}
+              </ToggleGroup>
+              <FieldDescription>外圈表示已用比例，内部显示数字；无权限或暂无数据时显示 --。</FieldDescription>
+            </Field>
+            <FieldSeparator />
+            <Field data-disabled={disabled}>
+              <FieldLabel id="notch-status-label">右侧状态</FieldLabel>
+              <ToggleGroup type="single" variant="outline" spacing={2} aria-labelledby="notch-status-label"
+                disabled={disabled} value={settings?.notchStatus ?? "NPC_WORKING"} onValueChange={(value) => {
+                  const selected = NOTCH_STATUSES.find((candidate) => candidate.key === value);
+                  if (selected) void update({ notchStatus: selected.key });
+                }}>
+                {NOTCH_STATUSES.map((value) => <ToggleGroupItem key={value.key} value={value.key}>{value.label}</ToggleGroupItem>)}
+              </ToggleGroup>
+              <FieldDescription>统计全部监控组织，上方显示数量，下方显示「{status.label}」。</FieldDescription>
+            </Field>
+            <FieldSeparator />
+            <Field>
+              <FieldLabel>展示预览</FieldLabel>
+              <div className="flex items-center justify-between gap-4 rounded-xl bg-surface px-5 py-3 text-surface-foreground" aria-label="刘海展示预览">
+                <UsageRing percent={usage.percent} label={`${usage.org?.name ?? "组织不可用"} ${usage.metric.label}`} />
+                <StatusCount count={count} label={status.label} />
+              </div>
+              <FieldDescription>{usage.org?.name ?? "组织不可用"} · {usage.metric.label} · 当前为演示数据</FieldDescription>
+            </Field>
+          </FieldGroup>
         </CardContent>
       </Card>
       <SetupView />

@@ -37,12 +37,14 @@ pub fn run() {
             cli::cli_install,
             cli::cnb_call,
             surface::surface_resize,
+            surface::notch_geometry,
             surface::panel_show,
             surface::float_nudge,
             surface::float_settle,
             settings::settings_get,
             settings::settings_set_notch,
-            settings::settings_set_float
+            settings::settings_set_float,
+            settings::settings_set_notch_content
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

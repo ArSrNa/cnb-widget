@@ -9,3 +9,93 @@
   }
   body { user-select: none; }
 }
+
+/* The desktop surfaces are drawn separately from the workbench controls. */
+.usage-ring {
+  position: relative;
+  display: inline-grid;
+  place-items: center;
+  width: 48px;
+  height: 48px;
+  flex-shrink: 0;
+  font-size: 12px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--surface-foreground);
+}
+.usage-ring svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+.usage-ring circle { fill: none; stroke-width: 2.5; }
+.usage-ring-track { stroke: var(--surface-foreground); opacity: 0.16; }
+.usage-ring-progress { stroke: var(--ring); stroke-linecap: round; transition: stroke-dasharray 180ms ease; }
+.usage-ring-warning { stroke: var(--destructive); }
+.usage-ring-compact { width: 28px; height: 28px; font-size: 8px; }
+.status-count {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  flex-shrink: 0;
+  text-align: center;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.status-count-number { font-size: 22px; line-height: 26px; font-weight: 600; }
+.status-count-label { font-size: 12px; line-height: 16px; font-weight: 400; color: var(--muted-foreground); }
+.status-count-compact { width: 28px; height: 28px; }
+.status-count-compact .status-count-number { font-size: 16px; line-height: 17px; }
+.status-count-compact .status-count-label { font-size: 9px; line-height: 11px; }
+.notch-surface {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  border-radius: 0 0 10px 10px;
+  background: var(--surface);
+  color: var(--surface-foreground);
+  transition: border-radius 160ms ease;
+}
+.notch-surface[data-phase="peek"] { border-radius: 0 0 20px 20px; }
+.notch-header {
+  display: grid;
+  grid-template-columns: minmax(var(--notch-wing-width), 1fr) var(--notch-width) minmax(var(--notch-wing-width), 1fr);
+  grid-template-rows: minmax(0, 1fr);
+  align-items: center;
+  width: 100%;
+  height: var(--notch-height);
+  flex-shrink: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  outline: none;
+}
+.notch-header:focus-visible { box-shadow: inset 0 0 0 2px var(--ring); }
+.notch-usage, .notch-status { display: flex; align-items: center; justify-content: center; }
+.notch-surface[data-phase="peek"] .notch-header { height: calc(var(--notch-height) + 20px); }
+.notch-surface[data-phase="peek"] .usage-ring-compact { width: 40px; height: 40px; font-size: 10px; }
+.notch-surface[data-phase="peek"] .status-count-compact { width: 40px; height: 40px; }
+.notch-surface[data-phase="peek"] .status-count-number { font-size: 20px; line-height: 23px; }
+.notch-surface[data-phase="peek"] .status-count-label { font-size: 10px; line-height: 13px; }
+.notch-overview {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: 100%;
+  flex: 1;
+  padding: 12px 18px;
+  animation: notch-details-enter 160ms ease-out;
+}
+@keyframes notch-details-enter {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .usage-ring-progress, .notch-surface { transition: none; }
+  .notch-overview { animation: none; }
+}
