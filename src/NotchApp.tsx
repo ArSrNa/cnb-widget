@@ -14,7 +14,7 @@ import { readableUsageOrgs, selectedUsage } from "@/lib/usage";
 
 const PREVIEW_GEOMETRY: NotchGeometry = { available: true, notchWidth: 184, menuBarHeight: 32 };
 const WING_WIDTH = 64;
-const MOTION_DURATION_MS = 400;
+const MOTION_DURATION_MS = 200;
 const MOTION_EASING = "cubic-bezier(0.4, 0, 0.2, 1)";
 const CLOSE_DELAY_MS = 200;
 type Phase = "idle" | "peek";
