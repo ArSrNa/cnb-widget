@@ -1,0 +1,307 @@
+//! 灵动岛 / 悬浮球的窗口几何与生命周期管理
+//!
+//! - `notch`：灵动岛，主屏顶部居中、与物理刘海融合，悬停加宽（codex-island 式）
+//! - `float`：悬浮球，可拖动，位置持久化到 settings
+//! - 两者均由面板内开关独立控制显隐；点击任意表面唤起主面板窗口。
+
+use tauri::{
+    AppHandle, LogicalSize, Manager, PhysicalPosition, WebviewUrl, WebviewWindow,
+    WebviewWindowBuilder, WindowEvent,
+};
+
+#[cfg(target_os = "macos")]
+mod macos;
+
+const NOTCH_WING_WIDTH: f64 = 64.0;
+
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NotchGeometry {
+    pub available: bool,
+    pub notch_width: f64,
+    pub menu_bar_height: f64,
+}
+
+impl Default for NotchGeometry {
+    fn default() -> Self {
+        Self {
+            available: false,
+            notch_width: 184.0,
+            menu_bar_height: 32.0,
+        }
+    }
+}
+
+#[tauri::command]
+pub fn notch_geometry(app: AppHandle) -> Result<NotchGeometry, String> {
+    #[cfg(target_os = "macos")]
+    {
+        macos::geometry(&app)
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = app;
+        Ok(NotchGeometry::default())
+    }
+}
+
+pub const NOTCH_LABEL: &str = "notch";
+pub const FLOAT_LABEL: &str = "float";
+pub const FLOAT_DETAILS_LABEL: &str = "float-details";
+
+/// 悬浮球窗口尺寸（逻辑像素）
+pub const FLOAT_SIZE: (f64, f64) = (64.0, 64.0);
+
+/// 打开悬浮球旁的详情窗；完整可读组织列表在固定窗口内滚动。
+#[tauri::command]
+pub fn float_details_show(app: AppHandle, window: WebviewWindow) -> Result<(), String> {
+    if window.label() != FLOAT_LABEL {
+        return Err("请从悬浮球打开详情".into());
+    }
+    let monitor = window
+        .current_monitor()
+        .map_err(|e| format!("获取显示器失败: {e}"))?
+        .ok_or("无可用显示器")?;
+    let scale = monitor.scale_factor();
+    let area = monitor.work_area();
+    let width = 400.0_f64.min(area.size.width as f64 / scale);
+    let height = 360.0_f64.min(area.size.height as f64 / scale);
+    let details = match app.get_webview_window(FLOAT_DETAILS_LABEL) {
+        Some(details) => details,
+        None => {
+            let details =
+                WebviewWindowBuilder::new(&app, FLOAT_DETAILS_LABEL, WebviewUrl::default())
+                    .title("CNB 组织用量")
+                    .inner_size(width, height)
+                    .visible(false)
+                    .transparent(true)
+                    .decorations(false)
+                    .always_on_top(true)
+                    .skip_taskbar(true)
+                    .resizable(false)
+                    .shadow(false)
+                    .focused(false)
+                    .build()
+                    .map_err(|e| format!("创建悬浮详情失败: {e}"))?;
+            let handle = details.clone();
+            details.on_window_event(move |event| match event {
+                WindowEvent::Focused(false) => {
+                    let _ = handle.hide();
+                }
+                WindowEvent::CloseRequested { api, .. } => {
+                    api.prevent_close();
+                    let _ = handle.hide();
+                }
+                _ => (),
+            });
+            details
+        }
+    };
+    let anchor = window
+        .outer_position()
+        .map_err(|e| format!("获取悬浮球位置失败: {e}"))?;
+    let popup_width = (width * scale).round() as i32;
+    let popup_height = (height * scale).round() as i32;
+    let gap = (8.0 * scale).round() as i32;
+    let left = area.position.x;
+    let top = area.position.y;
+    let right = left + area.size.width as i32;
+    let bottom = top + area.size.height as i32;
+    let proposed_x = if anchor.x - popup_width - gap >= left {
+        anchor.x - popup_width - gap
+    } else {
+        anchor.x + (FLOAT_SIZE.0 * scale).round() as i32 + gap
+    };
+    let x = proposed_x.clamp(left, (right - popup_width).max(left));
+    let y = anchor.y.clamp(top, (bottom - popup_height).max(top));
+    details
+        .set_size(LogicalSize::new(width, height))
+        .map_err(|e| format!("调整详情尺寸失败: {e}"))?;
+    details
+        .set_position(PhysicalPosition::new(x, y))
+        .map_err(|e| format!("定位详情失败: {e}"))?;
+    details.show().map_err(|e| format!("显示详情失败: {e}"))?;
+    details
+        .set_focus()
+        .map_err(|e| format!("聚焦详情失败: {e}"))?;
+    Ok(())
+}
+
+#[tauri::command]
+pub fn float_details_hide(window: WebviewWindow) -> Result<(), String> {
+    if window.label() != FLOAT_DETAILS_LABEL {
+        return Err("无效的详情窗口".into());
+    }
+    window.hide().map_err(|e| format!("隐藏详情失败: {e}"))
+}
+
+/// 将窗口调整为指定逻辑尺寸，并保持水平居中、贴住屏幕顶部。
+#[tauri::command]
+pub fn surface_resize(window: WebviewWindow, width: f64, height: f64) -> Result<(), String> {
+    if window.label() != NOTCH_LABEL
+        || !width.is_finite()
+        || !height.is_finite()
+        || !(176.0..=1024.0).contains(&width)
+        || !(24.0..=480.0).contains(&height)
+    {
+        return Err("无效的刘海窗口尺寸".into());
+    }
+    #[cfg(target_os = "macos")]
+    {
+        macos::place(&window, width, height)
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        let monitor = window
+            .current_monitor()
+            .map_err(|e| format!("获取显示器失败: {e}"))?
+            .ok_or("无可用显示器")?;
+        let scale = monitor.scale_factor();
+        let msize = monitor.size();
+
+        let w = (width * scale) as i32;
+        let origin = monitor.position();
+        let x = origin.x + ((msize.width as i32) - w) / 2;
+
+        window
+            .set_size(LogicalSize::new(width, height))
+            .map_err(|e| format!("调整窗口尺寸失败: {e}"))?;
+        window
+            .set_position(PhysicalPosition::new(x, origin.y))
+            .map_err(|e| format!("调整窗口位置失败: {e}"))?;
+        Ok(())
+    }
+}
+
+/// 创建（或复用）并显示灵动岛窗口（主屏顶部居中）
+pub fn show_notch_window(app: &AppHandle) -> Result<(), String> {
+    let geometry = notch_geometry(app.clone())?;
+    if !geometry.available {
+        if let Some(existing) = app.get_webview_window(NOTCH_LABEL) {
+            existing
+                .hide()
+                .map_err(|e| format!("隐藏灵动刘海失败: {e}"))?;
+        }
+        return Ok(());
+    }
+    let width = geometry.notch_width + NOTCH_WING_WIDTH * 2.0;
+    let height = geometry.menu_bar_height;
+    if let Some(existing) = app.get_webview_window(NOTCH_LABEL) {
+        surface_resize(existing.clone(), width, height)?;
+        if !existing.is_visible().map_err(|e| e.to_string())? {
+            existing
+                .show()
+                .map_err(|e| format!("显示灵动岛失败: {e}"))?;
+        }
+        return Ok(());
+    }
+
+    let win = WebviewWindowBuilder::new(app, NOTCH_LABEL, WebviewUrl::default())
+        .title("cnb-widget")
+        .inner_size(width, height)
+        .visible(false)
+        .transparent(true)
+        .decorations(false)
+        .always_on_top(true)
+        .skip_taskbar(true)
+        .resizable(false)
+        .shadow(false)
+        .focused(false)
+        .accept_first_mouse(true)
+        .build()
+        .map_err(|e| format!("创建灵动岛窗口失败: {e}"))?;
+
+    #[cfg(target_os = "macos")]
+    macos::install_hover(&win)?;
+    surface_resize(win.clone(), width, height)?;
+
+    win.show().map_err(|e| format!("显示灵动岛失败: {e}"))?;
+    Ok(())
+}
+
+/// 创建（或复用）并显示悬浮球窗口（默认主屏右侧，拖动后位置持久化）
+pub fn show_float_window(app: &AppHandle) -> Result<(), String> {
+    if let Some(existing) = app.get_webview_window(FLOAT_LABEL) {
+        if !existing.is_visible().map_err(|e| e.to_string())? {
+            existing
+                .show()
+                .map_err(|e| format!("显示悬浮球失败: {e}"))?;
+        }
+        return Ok(());
+    }
+
+    let saved = crate::settings::load(app).float_pos;
+    let win = WebviewWindowBuilder::new(app, FLOAT_LABEL, WebviewUrl::default())
+        .title("cnb-widget")
+        .inner_size(FLOAT_SIZE.0, FLOAT_SIZE.1)
+        .visible(false)
+        .transparent(true)
+        .decorations(false)
+        .always_on_top(true)
+        .skip_taskbar(true)
+        .resizable(false)
+        .shadow(false)
+        .focused(false)
+        .build()
+        .map_err(|e| format!("创建悬浮球窗口失败: {e}"))?;
+
+    let scale = win.scale_factor().unwrap_or(2.0);
+    let (x, y) = match saved {
+        Some([lx, ly]) => ((lx * scale) as i32, (ly * scale) as i32),
+        None => match app.primary_monitor() {
+            Ok(Some(monitor)) => {
+                let s = monitor.scale_factor();
+                let w = (FLOAT_SIZE.0 * s) as i32;
+                let margin = (24.0 * s) as i32;
+                (
+                    (monitor.size().width as i32) - w - margin,
+                    (monitor.size().height as f64 * 0.33) as i32,
+                )
+            }
+            _ => (0, 0),
+        },
+    };
+    let _ = win.set_position(PhysicalPosition::new(x.max(0), y.max(0)));
+
+    win.show().map_err(|e| format!("显示悬浮球失败: {e}"))?;
+    Ok(())
+}
+
+/// 悬浮球拖动：按逻辑像素增量移动窗口
+#[tauri::command]
+pub fn float_nudge(window: WebviewWindow, dx: f64, dy: f64) -> Result<(), String> {
+    let scale = window
+        .scale_factor()
+        .map_err(|e| format!("获取缩放系数失败: {e}"))?;
+    let pos = window
+        .outer_position()
+        .map_err(|e| format!("获取窗口位置失败: {e}"))?;
+    window
+        .set_position(PhysicalPosition::new(
+            pos.x + (dx * scale).round() as i32,
+            pos.y + (dy * scale).round() as i32,
+        ))
+        .map_err(|e| format!("移动窗口失败: {e}"))
+}
+
+/// 悬浮球拖动结束：持久化当前位置（逻辑坐标）
+#[tauri::command]
+pub fn float_settle(app: AppHandle, window: WebviewWindow) -> Result<(), String> {
+    let scale = window
+        .scale_factor()
+        .map_err(|e| format!("获取缩放系数失败: {e}"))?;
+    let pos = window
+        .outer_position()
+        .map_err(|e| format!("获取窗口位置失败: {e}"))?;
+    crate::settings::set_float_pos(&app, (pos.x as f64 / scale, pos.y as f64 / scale))
+}
+
+/// 显示并聚焦主面板窗口（灵动岛/悬浮球点击时调用）
+#[tauri::command]
+pub fn panel_show(app: AppHandle) -> Result<(), String> {
+    let win = app.get_webview_window("main").ok_or("主面板窗口不存在")?;
+    let _ = win.unminimize();
+    let _ = win.show();
+    let _ = win.set_focus();
+    Ok(())
+}

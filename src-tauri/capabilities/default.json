@@ -1,0 +1,10 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "Capability for the main panel window, the notch island and the float ball windows",
+  "windows": ["main", "notch", "float", "float-details"],
+  "permissions": [
+    "core:default",
+    "opener:default"
+  ]
+}
