@@ -111,6 +111,9 @@ fn sync(app: &AppHandle, s: &Settings) -> Result<(), String> {
         surface::show_float_window(app)?;
     } else if let Some(win) = app.get_webview_window(surface::FLOAT_LABEL) {
         let _ = win.hide();
+        if let Some(details) = app.get_webview_window(surface::FLOAT_DETAILS_LABEL) {
+            let _ = details.hide();
+        }
     }
     let _ = app.emit("settings-changed", s);
     Ok(())

@@ -100,7 +100,7 @@ export default function SettingsPage() {
               <Field orientation="horizontal" data-disabled={disabled}>
                 <FieldContent>
                   <FieldLabel htmlFor="float-enabled">悬浮球</FieldLabel>
-                  <FieldDescription>显示可拖动的用量小球，点击打开工作台。</FieldDescription>
+                  <FieldDescription>显示可拖动的用量小球，点击查看所有可读组织的用量详情。</FieldDescription>
                 </FieldContent>
                 <Switch id="float-enabled" disabled={disabled} checked={settings?.floatEnabled ?? false} onCheckedChange={(value) => void update({ floatEnabled: value })} />
               </Field>

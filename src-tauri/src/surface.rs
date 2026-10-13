@@ -4,10 +4,9 @@
 //! - `float`：悬浮球，可拖动，位置持久化到 settings
 //! - 两者均由面板内开关独立控制显隐；点击任意表面唤起主面板窗口。
 
-#[cfg(not(target_os = "macos"))]
-use tauri::LogicalSize;
 use tauri::{
-    AppHandle, Manager, PhysicalPosition, WebviewUrl, WebviewWindow, WebviewWindowBuilder,
+    AppHandle, LogicalSize, Manager, PhysicalPosition, WebviewUrl, WebviewWindow,
+    WebviewWindowBuilder, WindowEvent,
 };
 
 #[cfg(target_os = "macos")]
@@ -48,9 +47,93 @@ pub fn notch_geometry(app: AppHandle) -> Result<NotchGeometry, String> {
 
 pub const NOTCH_LABEL: &str = "notch";
 pub const FLOAT_LABEL: &str = "float";
+pub const FLOAT_DETAILS_LABEL: &str = "float-details";
 
 /// 悬浮球窗口尺寸（逻辑像素）
 pub const FLOAT_SIZE: (f64, f64) = (64.0, 64.0);
+
+/// 打开悬浮球旁的详情窗；完整可读组织列表在固定窗口内滚动。
+#[tauri::command]
+pub fn float_details_show(app: AppHandle, window: WebviewWindow) -> Result<(), String> {
+    if window.label() != FLOAT_LABEL {
+        return Err("请从悬浮球打开详情".into());
+    }
+    let monitor = window
+        .current_monitor()
+        .map_err(|e| format!("获取显示器失败: {e}"))?
+        .ok_or("无可用显示器")?;
+    let scale = monitor.scale_factor();
+    let area = monitor.work_area();
+    let width = 400.0_f64.min(area.size.width as f64 / scale);
+    let height = 360.0_f64.min(area.size.height as f64 / scale);
+    let details = match app.get_webview_window(FLOAT_DETAILS_LABEL) {
+        Some(details) => details,
+        None => {
+            let details =
+                WebviewWindowBuilder::new(&app, FLOAT_DETAILS_LABEL, WebviewUrl::default())
+                    .title("CNB 组织用量")
+                    .inner_size(width, height)
+                    .visible(false)
+                    .transparent(true)
+                    .decorations(false)
+                    .always_on_top(true)
+                    .skip_taskbar(true)
+                    .resizable(false)
+                    .shadow(false)
+                    .focused(false)
+                    .build()
+                    .map_err(|e| format!("创建悬浮详情失败: {e}"))?;
+            let handle = details.clone();
+            details.on_window_event(move |event| match event {
+                WindowEvent::Focused(false) => {
+                    let _ = handle.hide();
+                }
+                WindowEvent::CloseRequested { api, .. } => {
+                    api.prevent_close();
+                    let _ = handle.hide();
+                }
+                _ => (),
+            });
+            details
+        }
+    };
+    let anchor = window
+        .outer_position()
+        .map_err(|e| format!("获取悬浮球位置失败: {e}"))?;
+    let popup_width = (width * scale).round() as i32;
+    let popup_height = (height * scale).round() as i32;
+    let gap = (8.0 * scale).round() as i32;
+    let left = area.position.x;
+    let top = area.position.y;
+    let right = left + area.size.width as i32;
+    let bottom = top + area.size.height as i32;
+    let proposed_x = if anchor.x - popup_width - gap >= left {
+        anchor.x - popup_width - gap
+    } else {
+        anchor.x + (FLOAT_SIZE.0 * scale).round() as i32 + gap
+    };
+    let x = proposed_x.clamp(left, (right - popup_width).max(left));
+    let y = anchor.y.clamp(top, (bottom - popup_height).max(top));
+    details
+        .set_size(LogicalSize::new(width, height))
+        .map_err(|e| format!("调整详情尺寸失败: {e}"))?;
+    details
+        .set_position(PhysicalPosition::new(x, y))
+        .map_err(|e| format!("定位详情失败: {e}"))?;
+    details.show().map_err(|e| format!("显示详情失败: {e}"))?;
+    details
+        .set_focus()
+        .map_err(|e| format!("聚焦详情失败: {e}"))?;
+    Ok(())
+}
+
+#[tauri::command]
+pub fn float_details_hide(window: WebviewWindow) -> Result<(), String> {
+    if window.label() != FLOAT_DETAILS_LABEL {
+        return Err("无效的详情窗口".into());
+    }
+    window.hide().map_err(|e| format!("隐藏详情失败: {e}"))
+}
 
 /// 将窗口调整为指定逻辑尺寸，并保持水平居中、贴住屏幕顶部。
 #[tauri::command]

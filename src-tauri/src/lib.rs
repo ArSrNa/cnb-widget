@@ -49,6 +49,8 @@ pub fn run() {
             surface::panel_show,
             surface::float_nudge,
             surface::float_settle,
+            surface::float_details_show,
+            surface::float_details_hide,
             settings::settings_get,
             settings::settings_set_notch,
             settings::settings_set_float,

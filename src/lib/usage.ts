@@ -20,6 +20,10 @@ export interface OrgUsage {
 export const USAGE_DIMENSIONS = USAGE_METRICS.map(({ dimension, label, unit }) => ({ key: dimension, label, unit }));
 export type UsageDimensionKey = (typeof USAGE_DIMENSIONS)[number]["key"];
 
+export function readableUsageOrgs(orgs: OrgUsage[]): OrgUsage[] {
+  return orgs.filter((org) => !org.chargeForbidden && !org.error);
+}
+
 export function selectedUsage(orgs: OrgUsage[], settings: AppSettings) {
   const org = settings.usageOrg === null
     ? orgs.find((candidate) => !candidate.chargeForbidden && !candidate.error)

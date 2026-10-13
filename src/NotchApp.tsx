@@ -3,14 +3,14 @@ import { invoke, isTauri } from "@tauri-apps/api/core";
 import { IssueBadge } from "@/components/issue-badge";
 import { UsageRing } from "@/components/usage-ring";
 import { StatusCount } from "@/components/status-count";
+import { SurfaceUsageList } from "@/components/surface-usage-list";
 import { Button } from "@/components/ui/button";
-import { Progress } from "@/components/ui/progress";
 import { useSurfaceSettings } from "@/hooks/use-surface-settings";
 import { listenDesktop } from "@/lib/desktop";
 import { useNpc } from "@/hooks/use-npc";
 import { useCnb } from "@/hooks/use-cnb";
 import { NOTCH_STATUSES, type NotchGeometry } from "@/lib/settings";
-import { displayPercent, selectedUsage } from "@/lib/usage";
+import { readableUsageOrgs, selectedUsage } from "@/lib/usage";
 
 const PREVIEW_GEOMETRY: NotchGeometry = { available: true, notchWidth: 184, menuBarHeight: 32 };
 const WING_WIDTH = 64;
@@ -78,6 +78,7 @@ export default function NotchApp() {
   }, [close]);
 
   const usage = selectedUsage(data.error ? [] : data.orgs, settings);
+  const readableOrgs = data.error ? [] : readableUsageOrgs(data.orgs);
   const status = NOTCH_STATUSES.find((value) => value.key === settings.notchStatus) ?? NOTCH_STATUSES[0];
   const count = !npcData.updatedAt || npcData.error || npcData.warnings.length > 0 ? null : npcData.issues.filter((issue) => issue.state === status.key).length;
   const label = `${usage.org?.name ?? "组织不可用"} · ${usage.metric.label} · ${usage.display.label}`;
@@ -102,24 +103,12 @@ export default function NotchApp() {
           <span className="notch-status"><StatusCount compact count={count} label={status.label} /></span>
         </button>
         <div className="notch-overview" id="notch-details" inert={phase !== "peek"} aria-hidden={phase !== "peek"}>
-          <div className="flex items-center justify-between gap-3 text-xs">
+          <div className="flex shrink-0 items-center justify-between gap-3 text-xs">
             <span>{usage.metric.label} · {usage.display.label} · 组织概览</span>
-            <span className="text-muted-foreground">{usage.org?.name ?? "组织不可用"}</span>
+            <span className="text-muted-foreground">{readableOrgs.length} 个组织</span>
           </div>
-          {(data.error || !data.orgs.length) && <span className="text-xs text-muted-foreground">请打开首页配置 CNB 连接</span>}
-          <div className="flex flex-col gap-2">
-            {data.orgs.slice(0, 4).map((org) => {
-              const percent = org.chargeForbidden || org.error || data.error ? null : displayPercent(org[usage.metric.dimension], settings.usageDisplay);
-              return (
-                <div key={org.slug} className="grid grid-cols-[7rem_minmax(0,1fr)_4rem] items-center gap-3 text-xs">
-                  <span className="truncate">{org.name}</span>
-                  <Progress value={Math.min(100, percent ?? 0)} aria-label={`${org.name} ${usage.metric.label} ${usage.display.label}`} />
-                  <span className="text-right tabular-nums">{org.chargeForbidden ? "无权限" : percent === null ? "--" : `${percent}%`}</span>
-                </div>
-              );
-            })}
-          </div>
-          <div className="flex items-center justify-between gap-2">
+          <SurfaceUsageList orgs={readableOrgs} settings={settings} />
+          <div className="flex shrink-0 items-center justify-between gap-2">
             <span className="flex items-center gap-2">{NOTCH_STATUSES.map(({ key }) => <IssueBadge key={key} state={key} count={npcData.issues.filter((issue) => issue.state === key).length} />)}</span>
             <Button size="xs" variant="secondary" onClick={() => { close(); void invoke("panel_show").catch(() => {}); }}>打开工作台</Button>
           </div>

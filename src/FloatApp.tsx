@@ -27,7 +27,7 @@ export default function FloatApp() {
 
   return (
     <div className="grid size-full place-items-center p-1">
-      <Button variant="surface" size="float" aria-label={`${label} ${usage.percent ?? "未知"}%，点击打开工作台，拖动调整位置`}
+      <Button variant="surface" size="float" aria-label={`${label} ${usage.percent ?? "未知"}%，点击查看组织用量详情，拖动调整位置`}
         onPointerDown={(event) => {
           if (event.button !== 0) return;
           event.currentTarget.setPointerCapture(event.pointerId);
@@ -44,7 +44,7 @@ export default function FloatApp() {
           chain.current = chain.current.then(() => invoke("float_nudge", { dx, dy })).catch(() => {});
         }}
         onPointerUp={endDrag} onPointerCancel={endDrag}
-        onClick={(event) => { if (event.detail === 0 || drag.current.moved < CLICK_THRESHOLD) void invoke("panel_show").catch(() => {}); }}>
+        onClick={(event) => { if (event.detail === 0 || drag.current.moved < CLICK_THRESHOLD) void invoke("float_details_show").catch(() => {}); }}>
         <UsageRing percent={usage.percent} warning={usage.warning} label={label} />
       </Button>
     </div>
