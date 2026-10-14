@@ -6,10 +6,12 @@ use objc2_app_kit::{
     NSAutoresizingMaskOptions, NSEvent, NSTrackingArea, NSTrackingAreaOptions, NSView, NSWindow,
 };
 use objc2_foundation::{NSObjectProtocol, NSPoint, NSRect};
+use std::cell::Cell;
 use tauri::{Emitter, WebviewWindow};
 
 pub struct HoverIvars {
     window: WebviewWindow,
+    inside: Cell<bool>,
 }
 
 define_class!(
@@ -21,12 +23,12 @@ define_class!(
     impl NotchHoverView {
         #[unsafe(method(mouseEntered:))]
         fn mouse_entered(&self, _event: &NSEvent) {
-            let _ = self.ivars().window.emit("notch-hover", true);
+            self.sync_hover();
         }
 
         #[unsafe(method(mouseExited:))]
         fn mouse_exited(&self, _event: &NSEvent) {
-            let _ = self.ivars().window.emit("notch-hover", false);
+            self.sync_hover();
         }
 
         // This transparent tracking view must not intercept webview buttons or focus.
@@ -39,6 +41,25 @@ define_class!(
     unsafe impl NSObjectProtocol for NotchHoverView {}
 );
 
+impl NotchHoverView {
+    fn sync_hover(&self) {
+        let Some(window) = self.window() else {
+            return;
+        };
+        let point = NSEvent::mouseLocation();
+        let frame = window.frame();
+        let inside = point.x >= frame.origin.x
+            && point.x < frame.origin.x + frame.size.width
+            && point.y >= frame.origin.y
+            && point.y < frame.origin.y + frame.size.height;
+        // Resizing the tracking view can synthesize an exit/enter pair without
+        // the pointer moving. Only broadcast actual changes in pointer containment.
+        if self.ivars().inside.replace(inside) != inside {
+            let _ = self.ivars().window.emit("notch-hover", inside);
+        }
+    }
+}
+
 pub fn install(
     window: WebviewWindow,
     native: &NSWindow,
@@ -46,7 +67,10 @@ pub fn install(
 ) -> Result<(), String> {
     let content = native.contentView().ok_or("刘海窗口没有内容视图")?;
     let bounds = content.bounds();
-    let allocated = NotchHoverView::alloc(mtm).set_ivars(HoverIvars { window });
+    let allocated = NotchHoverView::alloc(mtm).set_ivars(HoverIvars {
+        window,
+        inside: Cell::new(false),
+    });
     // SAFETY: Initialize our NSView subclass with its superclass designated initializer.
     let view: Retained<NotchHoverView> =
         unsafe { msg_send![super(allocated), initWithFrame: bounds] };

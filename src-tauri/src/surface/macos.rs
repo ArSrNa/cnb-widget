@@ -17,6 +17,13 @@ pub fn install_hover(window: &WebviewWindow) -> Result<(), String> {
             .map_err(|e| format!("获取原生刘海窗口失败: {e}"))?;
         // SAFETY: Tauri owns this NSWindow and this closure runs on the AppKit main thread.
         let native = unsafe { &*ptr.cast::<NSWindow>() };
+        native.setLevel(NSStatusWindowLevel + 1);
+        native.setCollectionBehavior(
+            NSWindowCollectionBehavior::CanJoinAllSpaces
+                | NSWindowCollectionBehavior::FullScreenAuxiliary
+                | NSWindowCollectionBehavior::Stationary,
+        );
+        native.setHidesOnDeactivate(false);
         hover::install(win, native, mtm)
     })
 }
@@ -91,20 +98,15 @@ pub fn place(window: &WebviewWindow, width: f64, height: f64) -> Result<(), Stri
             .map_err(|e| format!("获取原生刘海窗口失败: {e}"))?;
         // SAFETY: Tauri owns this NSWindow; all access occurs on the AppKit main thread.
         let native = unsafe { &*ptr.cast::<NSWindow>() };
-        native.setLevel(NSStatusWindowLevel + 1);
-        native.setCollectionBehavior(
-            NSWindowCollectionBehavior::CanJoinAllSpaces
-                | NSWindowCollectionBehavior::FullScreenAuxiliary
-                | NSWindowCollectionBehavior::Stationary,
-        );
-        native.setHidesOnDeactivate(false);
         // Equal wings keep the central camera gap aligned with the window midpoint.
         let x = notch_center - width / 2.0;
         let y = screen.origin.y + screen.size.height - height;
-        native.setFrame_display(
-            NSRect::new(NSPoint::new(x, y), NSSize::new(width, height)),
-            true,
-        );
+        let frame = NSRect::new(NSPoint::new(x, y), NSSize::new(width, height));
+        if native.frame() != frame {
+            // Do not force synchronous drawing of WebKit's old backing layer.
+            // Let its resized viewport paint on the next normal display pass.
+            native.setFrame_display(frame, false);
+        }
         Ok(())
     })
 }
