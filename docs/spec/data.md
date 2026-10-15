@@ -15,11 +15,11 @@
 | 数据集 | 来源命令 / 端点 | 频率（默认） | 备注 |
 |---|---|---|---|
 | 身份 | `users get-user-info` | 启动 1 次 | — |
-| 组织列表 | `organizations get-groups-by-user-id` | 6h | 与组织白名单求交集 |
-| 仓库列表 | `repositories get-repos --page-size 100` 翻页 | 10min | 按 `path` 前缀聚合组织维度汇总：Σ `open_issue_count`、`npc_created_pull_count`、`npc_builded_count` |
-| Issue 列表 | `issues list-issues --state open --order-by -last_acted_at` | 90s（仅白名单仓库） | 只拉 open，取前 N 条活跃 |
-| Issue 评论 | `issues list-comments --page-size 5` | 随 issue 轮询，仅当 `last_acted_at` 变化 | 500ms 间隔串行 |
-| NPC 观测（可选增强） | 直连 `/{org}/-/npc-observability/actions` | 30min | 需 Reporter+；缺失时降级为纯 issue 推导 |
+| 组织列表 | `organizations get-groups-by-user-id` | 6h | 当前读取全部所属组织，组织白名单尚未实现 |
+| 仓库列表 | `repositories get-repos --role Guest --page-size 100`，按 `--page` 翻页 | 随 NPC 快照采集，缓存 90s | 当前账号 / Token 授权范围；跳过明确没有 open Issue 的仓库 |
+| Issue 列表 | `issues list-issues --repo <repo> --state open --order-by=-last_acted_at --page-size 20` | 随 NPC 快照采集 | 每仓库仅取最近活跃的前 20 个 open Issue，不继续翻页 |
+| Issue 评论 | `issues list-issue-comments --repo <repo> --number <n> --sort=-created --page-size 5` | 随 Issue 采集；未变化且非工作中时复用缓存 | 最多读取最近 5 条；工作中或强制刷新时重新读取；明确无评论时跳过请求 |
+| NPC 观测（后续增强，未接入） | `/{org}/-/npc-observability/actions` | 未实现 | 当前完全由 Issue / 评论推导状态 |
 | 组织用量（六维度） | `charge get-volume --slug <org>`（本月已用）+ `charge get-quota --slug <org>`（月度额度） | 30min | ✅ 2026-10-13 实测 owner 组织可读；字段映射见下；成员组织 403 → 该组织用量降级隐藏 |
 | 特权额度（可选） | `charge get-special-amount --slug <org>` | 6h | 核时/GiB/credit 特权明细，仅在详细面板展示 desc 与数值 |
 | 构建日志 AI audit 聚合（备选） | 直连 `/{repo}/-/build/logs` → `/-/build/logs/ai-audit/{sn}/{pipeline}` 逐日聚合 | 30min | owner 组织 charge 不可用时的备选 credit 路线（按模型明细），首版不实现 |
@@ -45,26 +45,37 @@
 
 - **监控范围**：当前为账号与 Token 可访问资源；组织白名单制为后续配置意图（见 [../intent/data.md](../intent/data.md) §3）。
 - **缓存**：当前共享 Rust 内存快照；退出快照到 `<app_data_dir>/cache.json` 与启动先渲染磁盘缓存留待后续。
-- **成本估算**：10 仓库 × (1 issue 列表 + ~3 变更评论) ≈ 40 次/90s；credit 聚合按日缓存（当日 15s 短缓存、历史日长缓存）。
+- **NPC 请求成本示例**：10 个有 open Issue 的仓库，每仓库读取 1 次 Issue 列表、约 3 次评论，则约 40 次请求 / 轮，另加仓库列表分页请求。首次采集或强制刷新可能读取更多评论；请求全局串行，没有额外固定 500ms 间隔。
 
 ## 3. Issue 状态推导规则（核心业务逻辑）
 
-对每个 open issue，按最新评论推导状态（优先级自上而下）：
+当前实现位于 [`src-tauri/src/data.rs`](../../src-tauri/src/data.rs) 的 `collect_npc` / `issue_state`，前端标签位于 [`src/lib/npc.ts`](../../src/lib/npc.ts)。数据来自 CNB CLI 的真实响应，展示状态由应用本地推导；统计单位是 **Issue 数量**，每个 Issue 只归入一种状态。
 
-```
-1. 最新评论 statuses.npc[] 存在未终结 pending，
-   或 npc.work_mode == "true" 且该 status 创建于 30min 内
-      → NPC_WORKING（工作中）           🟡 呼吸动画
-2. 最新评论 author.is_npc == true 且 npc status state == "error"
-      → NPC_FAILED（失败，等待人）       🔴
-3. 最新评论 author.is_npc == true
-      → NPC_REPLIED（已回复，等待人）    🔵
-4. 最新评论 author 为人 且 body 含 @<npc-slug>（或评论后 5min 内出现 npc pipeline status）
-      → NPC_QUEUED（已派发，NPC 未响应） 🟠
-5. 最新评论 author 为人，无 @npc
-      → WAITING_REPLY（等待人/闲置）     ⚪ 仅展开面板显示，不占胶囊
-```
+分类优先读取最新一条评论；没有评论时读取 Issue 本身。以下称其为「最新内容」。若没有评论，且 Issue 本身没有 `statuses.npc` 分组，直接归为 `WAITING_REPLY`；其余情况按下表自上而下匹配，命中即停止。
 
-- 「30min」等阈值进配置文件，初版不做成 UI 设置；
-- 已知边界：无评论的 open issue 落入状态 5；`npc.work_mode` 字段可靠性待观察；
-- 推导规则集中在一个模块，字段变动时只改一处。
+| 优先级 | 显示状态 | 内部状态 | 当前判断条件 |
+|---|---|---|---|
+| 1 | 工作中 | `NPC_WORKING` | 最新内容的 `statuses.npc[].statuses[].state` 中存在 `pending`；或某个 NPC 分组的 `annotations["npc.work_mode"]` 为字符串 `"true"`，且最新内容的 `created_at` 距今不足 1800 秒 |
+| 2 | 失败 | `NPC_FAILED` | 最新内容的 `author.is_npc == true`，且其 NPC 状态中存在 `error` 或 `failure` |
+| 3 | 待回复 | `NPC_REPLIED` | 最新内容的 `author.is_npc == true`，且未命中更高优先级规则；不要求存在 `success` 状态 |
+| 4 | 已派发 | `NPC_QUEUED` | 最新内容未标记为 NPC 作者，正文中有可识别的 `@<npc-slug>` 提及 |
+| 5 | 等待人 | `WAITING_REPLY` | 其余情况，包括普通用户发言且无可靠 NPC 提及、没有评论且无 NPC 状态 |
+
+「已派发」中的 NPC 标识必须来自 Issue 或最近 5 条评论的 `statuses.npc[].key.slug`。正文按空白拆分，移除词两端的中英文逗号、冒号后匹配 `@<npc-slug>`；不会把任意 `@用户名` 当作 NPC，也没有“评论后 5 分钟内出现流水线”这一额外判断。
+
+### 3.1 采集、刷新与缓存
+
+1. `useNpc` 挂载时请求 `npc_get`，此后每 90 秒请求一次；后端使用所有窗口共享的 Rust 内存快照，普通请求在上次采集完成后 90 秒内复用快照。采集为轮询，不是服务端实时推送，实际更新还受串行请求耗时影响。
+2. 快照需要重新采集时，先分页读取授权仓库，再逐仓库读取前 20 个 open Issue 及其最近 5 条评论。仅按授权范围采集，没有组织白名单、当前用户参与或指派人筛选。
+3. 评论按 `仓库路径#Issue编号` 缓存；Issue 活动时间未变，且按缓存评论推导的状态不是 `NPC_WORKING` 时，复用评论。活动时间优先取 `last_acted_at`，缺失时依次回退 `updated_at`、`created_at`。工作中任务每轮重新读取评论，即使活动时间未变。
+4. “刷新任务”按钮调用 `npc_get(force=true)`，绕过 90 秒快照缓存和评论复用。切换认证后清空旧账号缓存并重新读取。
+5. 采集完成后广播 `npc-changed`，各窗口同步同一份快照。
+
+### 3.2 统计范围与已知边界
+
+- 每仓库仅统计最近活跃的前 20 个 open Issue，不包含已关闭 Issue，也不是仓库全量任务统计；多个 NPC 在同一 Issue 中活动仍只计为一个 Issue。
+- “待回复”表示最新内容来自 NPC，未判断具体在等谁回复；也未判断该回复是否表示任务完成。“等待人”是兜底分类，不能据此确认存在某个人的待办。
+- “工作中”规则优先于“失败”，且 `pending` 没有超时上限。1800 秒阈值只用于 `npc.work_mode`，取最新内容的创建时间，不取 status 创建时间；阈值当前硬编码，未提供配置或 UI 设置。
+- 读取仓库的 Issue 列表失败时跳过该仓库，读取评论失败时跳过该 Issue，并在 `warnings` 中记录原因；数据读取失败不会归为 `NPC_FAILED`。整体采集失败时保留上次快照并设置 `error`。
+- NPC 动态页显示读取告警及当前可用列表；刘海主计数在未更新、存在 `error` 或任一 `warning` 时显示暂无数据，展开区的状态徽标仍按当前快照计数。刘海主计数可在工作中、待回复、失败三种状态中选择，不随左侧用量组织选择而过滤。
+- `npc.work_mode` 和 NPC status 字段的变化可能影响推导结果；当前没有接入独立的 NPC 运行状态接口。
