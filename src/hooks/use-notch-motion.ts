@@ -5,7 +5,8 @@ type Phase = "idle" | "peek";
 interface FrameSize { width: number; height: number }
 const nextPaint = () => new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
 
-// Native resize and WebView painting must finish before the CSS expansion starts.
+// Native clipping bounds must expand before the CSS expansion starts.
+// On macOS the WebView itself keeps a fixed, expanded viewport to avoid stretching.
 // On collapse, wait for the actual transition rather than a duration-based timer.
 export function useNotchMotion(idleWidth: number, peekWidth: number, menuBarHeight: number) {
   const [phase, setPhase] = useState<Phase>("idle");
@@ -13,7 +14,6 @@ export function useNotchMotion(idleWidth: number, peekWidth: number, menuBarHeig
   const desired = useRef<Phase>("idle");
   const revision = useRef(0);
   const mounted = useRef(true);
-  const nativeFrame = useRef<FrameSize | null>(null);
   const resizeQueue = useRef<Promise<void>>(Promise.resolve());
 
   const request = useCallback(async (next: Phase, force = false) => {
@@ -24,10 +24,10 @@ export function useNotchMotion(idleWidth: number, peekWidth: number, menuBarHeig
     const resize = (frame: FrameSize) => {
       const operation = resizeQueue.current.catch(() => {}).then(async () => {
         if (!active()) return;
-        if (nativeFrame.current?.width === frame.width && nativeFrame.current.height === frame.height
-          && Math.abs(window.innerWidth - frame.width) < 1 && Math.abs(window.innerHeight - frame.height) < 1) return;
+        // The viewport and native clipping frame have different sizes on macOS.
+        // The native placement code skips unchanged frames; innerWidth/innerHeight
+        // cannot tell us whether the window itself needs resizing.
         if (isTauri()) await invoke("surface_resize", { width: frame.width, height: frame.height });
-        nativeFrame.current = frame;
       });
       resizeQueue.current = operation;
       return operation;
@@ -36,7 +36,7 @@ export function useNotchMotion(idleWidth: number, peekWidth: number, menuBarHeig
       if (next === "peek") {
         await resize({ width: peekWidth, height: menuBarHeight + 200 });
         if (!active()) return;
-        // Two paints let WebKit settle its resized viewport/backing layer first.
+        // Let the enlarged native clipping bounds settle before animating.
         await nextPaint();
         await nextPaint();
         if (active()) setPhase("peek");

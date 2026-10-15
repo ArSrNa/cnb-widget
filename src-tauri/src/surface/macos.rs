@@ -1,13 +1,14 @@
 //! Menu-bar placement uses AppKit points and the notched screen's full frame,
 //! rather than its visible frame (which excludes the menu bar).
 use objc2::{MainThreadMarker, sel};
-use objc2_app_kit::{NSScreen, NSStatusWindowLevel, NSWindow, NSWindowCollectionBehavior};
+use objc2_app_kit::{NSScreen, NSStatusWindowLevel, NSView, NSWindow, NSWindowCollectionBehavior};
 use objc2_foundation::{NSObjectProtocol, NSPoint, NSRect, NSSize};
 use tauri::{AppHandle, Manager, WebviewWindow};
 
-use super::NotchGeometry;
+use super::{NOTCH_WING_WIDTH, NotchGeometry};
 
 mod hover;
+mod viewport;
 
 pub fn install_hover(window: &WebviewWindow) -> Result<(), String> {
     let win = window.clone();
@@ -90,23 +91,33 @@ pub fn geometry(app: &AppHandle) -> Result<NotchGeometry, String> {
 pub fn place(window: &WebviewWindow, width: f64, height: f64) -> Result<(), String> {
     let win = window.clone();
     on_main_thread(window.app_handle(), move |mtm| {
-        let Some((screen, notch_center, _)) = screen_geometry(mtm) else {
+        let Some((screen, notch_center, geometry)) = screen_geometry(mtm) else {
             return Err("当前没有可用的刘海屏".into());
         };
-        let ptr = win
-            .ns_window()
-            .map_err(|e| format!("获取原生刘海窗口失败: {e}"))?;
-        // SAFETY: Tauri owns this NSWindow; all access occurs on the AppKit main thread.
-        let native = unsafe { &*ptr.cast::<NSWindow>() };
+        let viewport_size = NSSize::new(
+            (geometry.notch_width + NOTCH_WING_WIDTH * 2.0).max(520.0),
+            geometry.menu_bar_height + 200.0,
+        );
         // Equal wings keep the central camera gap aligned with the window midpoint.
         let x = notch_center - width / 2.0;
         let y = screen.origin.y + screen.size.height - height;
         let frame = NSRect::new(NSPoint::new(x, y), NSSize::new(width, height));
-        if native.frame() != frame {
-            // Do not force synchronous drawing of WebKit's old backing layer.
-            // Let its resized viewport paint on the next normal display pass.
-            native.setFrame_display(frame, false);
-        }
+        win.with_webview(move |platform| {
+            // SAFETY: WKWebView inherits NSView; Tauri provides both live handles
+            // on the AppKit main thread, synchronously in this placement operation.
+            let webview = unsafe { &*platform.inner().cast::<NSView>() };
+            let native = unsafe { &*platform.ns_window().cast::<NSWindow>() };
+            // Disable WebView autoresizing before changing the clipping window.
+            viewport::pin(webview, viewport_size);
+            if native.frame() != frame {
+                // Do not force synchronous drawing of WebKit's old backing layer.
+                native.setFrame_display(frame, false);
+            }
+            // Recenter explicitly: AppKit cannot distribute zero/negative margins
+            // reliably when the clipping window is smaller than the viewport.
+            viewport::pin(webview, viewport_size);
+        })
+        .map_err(|e| format!("固定刘海绘制尺寸失败: {e}"))?;
         Ok(())
     })
 }
