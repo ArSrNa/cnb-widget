@@ -54,6 +54,14 @@ main:
   tag_push:
     - *github-sync
 
+demo: # demo 分支与 main 保持镜像同步
+  push:
+    - name: build-and-check
+      runner: *ci-runner
+      docker: *ci-docker
+      stages: *ci-stages
+    - *github-sync
+
 v*: # 打 tag（如 v0.1.0）触发发布构建
   tag_push:
     - name: release-build
@@ -76,6 +84,8 @@ github-sync: # 手动触发：push 一次分支或修改一次该分支即可全
   web_trigger:
     - <<: *github-sync
       branches: main
+    - <<: *github-sync
+      branches: demo
 
 $: # 云原生开发环境（WebIDE / VSCode 客户端）
   vscode:
