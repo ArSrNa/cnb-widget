@@ -1,0 +1,152 @@
+# GitHub Actions 发布流水线
+#
+# 用 GitHub 托管的 macOS / Windows 构建机构建 Tauri 安装包，成功后上传到腾讯云 COS。
+# COS 对象布局与 arsrna/esrgan-app 保持一致：
+#   <COS_PREFIX>/<版本>/<平台>/<架构>/<文件名>
+# 版本号唯一来源是 package.json（src-tauri/tauri.conf.json 的 version 指向 ../package.json）。
+#
+# 仓库 Settings → Secrets and variables → Actions 需要配置：
+#   secrets.TENCENTCLOUD_SECRET_ID / secrets.TENCENTCLOUD_SECRET_KEY  腾讯云密钥（与 ArESRGAN-GUI 同名，可原样复制）
+#   secrets.COS_BUCKET（含 appid 后缀）/ secrets.COS_REGION            也可以改用 vars.COS_BUCKET / vars.COS_REGION
+#   vars.COS_PREFIX                                                    可选，默认 app-release/cnb-widget
+#
+# 触发：推送 v* 标签（CNB 流水线会同步标签到 GitHub），或在 Actions 页面手动运行。
+
+name: release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 发布版本号，留空则使用 package.json（例如 0.2.0）
+        type: string
+        required: false
+      dry-run:
+        description: 只构建并预览 COS 上传计划，不真正上传
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+defaults:
+  run:
+    # Windows runner 也能用 Git Bash，脚本保持跨平台一致
+    shell: bash
+
+jobs:
+  build:
+    name: ${{ matrix.platform }} / ${{ matrix.arch }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: macos
+            runner: macos-latest # Apple Silicon
+            target: aarch64-apple-darwin
+            arch: arm64
+            bundles: dmg
+            ext: dmg
+          - platform: windows
+            runner: windows-latest
+            target: x86_64-pc-windows-msvc
+            arch: x64
+            bundles: nsis
+            ext: exe
+          # 如需 Intel Mac 安装包，追加：
+          # - { platform: macos, runner: macos-15-intel, target: x86_64-apple-darwin, arch: x64, bundles: dmg, ext: dmg }
+
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: 安装 Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: 安装 Rust 工具链
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: 缓存 Rust 编译产物
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri -> target
+          key: ${{ matrix.target }}
+
+      - name: 安装前端依赖
+        run: bun install --frozen-lockfile
+
+      - name: 解析版本号
+        id: version
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
+            VERSION="${GITHUB_REF_NAME#v}"
+          elif [ -n "${INPUT_VERSION}" ]; then
+            VERSION="${INPUT_VERSION}"
+          else
+            VERSION="$(node -p "require('./package.json').version")"
+          fi
+          if ! [[ "${VERSION}" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$ ]]; then
+            echo "::error::版本号不合法：${VERSION}（示例：0.2.0）"
+            exit 1
+          fi
+          echo "value=${VERSION}" >> "${GITHUB_OUTPUT}"
+
+      - name: 同步版本号到 package.json
+        env:
+          VERSION: ${{ steps.version.outputs.value }}
+        run: |
+          node -e "
+          const fs = require('node:fs');
+          const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
+          pkg.version = process.env.VERSION;
+          fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2) + '\n');
+          "
+
+      - name: 构建安装包
+        run: bun run tauri build --target ${{ matrix.target }} --bundles ${{ matrix.bundles }}
+
+      - name: 归档安装包
+        uses: actions/upload-artifact@v4
+        with:
+          name: cnb-widget-${{ matrix.platform }}-${{ matrix.arch }}
+          if-no-files-found: error
+          path: src-tauri/target/${{ matrix.target }}/release/bundle/${{ matrix.bundles }}/*.${{ matrix.ext }}
+
+      - name: 安装 Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: 上传到 COS
+        env:
+          SECRET_ID: ${{ secrets.SECRET_ID || secrets.TENCENTCLOUD_SECRET_ID }}
+          SECRET_KEY: ${{ secrets.SECRET_KEY || secrets.TENCENTCLOUD_SECRET_KEY }}
+          SESSION_TOKEN: ${{ secrets.SESSION_TOKEN || secrets.TENCENTCLOUD_SECURITY_TOKEN }}
+          COS_BUCKET: ${{ vars.COS_BUCKET || secrets.COS_BUCKET }}
+          COS_REGION: ${{ vars.COS_REGION || secrets.COS_REGION }}
+          COS_PREFIX: ${{ vars.COS_PREFIX }}
+        run: |
+          set -euo pipefail
+          ARGS=(--platform "${{ matrix.platform }}" --arch "${{ matrix.arch }}")
+          if [ "${{ inputs.dry-run }}" = "true" ]; then
+            ARGS+=(--dry-run)
+          fi
+          node scripts/upload-cos.mjs "${ARGS[@]}"
