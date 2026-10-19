@@ -3,6 +3,7 @@ mod cli;
 mod data;
 mod settings;
 mod surface;
+mod update;
 
 use tauri::{Manager, WindowEvent};
 
@@ -54,7 +55,8 @@ pub fn run() {
             settings::settings_get,
             settings::settings_set_notch,
             settings::settings_set_float,
-            settings::settings_set_notch_content
+            settings::settings_set_notch_content,
+            update::update_check
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
