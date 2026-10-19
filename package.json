@@ -13,7 +13,8 @@
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
-    "tauri": "tauri"
+    "tauri": "tauri",
+    "icons": "tauri icon assets/icon/icon-1024.png"
   },
   "dependencies": {
     "@tailwindcss/vite": "^4.3.3",
