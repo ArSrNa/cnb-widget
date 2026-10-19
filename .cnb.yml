@@ -15,17 +15,32 @@
 
 .github-sync: &github-sync
   name: sync-to-github
+  # 用脚本阶段直接 git push，而不是插件任务：
+  # 插件任务读不到 imports 导入的自定义环境变量（CNB 文档「环境变量传递规则」），
+  # 凭据因此会是空值；脚本阶段里 imports 的变量可见。
   imports:
     - https://cnb.cool/arsrna/env/-/blob/main/git.yaml
-  image: tencentcom/git-sync
-  settings:
-    target_url: https://github.com/ArSrNa/cnb-widget.git
-    auth_type: https
-    username: ${GIT_USERNAME}
-    password: ${GIT_ACCESS_TOKEN}
-    git_user: ${GIT_USERNAME}
-    git_email: ${GIT_EMAIL}
-    push_tags: true
+  stages:
+    - name: 推送到 GitHub
+      script: |
+        set -eu
+        test -n "${GIT_USERNAME:-}" -a -n "${GIT_ACCESS_TOKEN:-}" \
+          || { echo "缺少 GIT_USERNAME / GIT_ACCESS_TOKEN，检查 arsrna/env 的 git.yaml"; exit 1; }
+        git config --global user.name "$GIT_USERNAME"
+        git config --global user.email "${GIT_EMAIL:-$GIT_USERNAME@users.noreply.github.com}"
+        for k in $(git config --global --name-only --get-regexp '^credential\.'); do
+          git config --global --unset-all "$k"
+        done
+        # 只把 GitHub 凭据交给 GitHub，不写进仓库的 .git/config，也不改变 CNB 远端
+        git config --global credential."https://github.com".username "$GIT_USERNAME"
+        git config --global credential."https://github.com".helper \
+          "!f() { echo username=$GIT_USERNAME; echo password=$GIT_ACCESS_TOKEN; }; f"
+        git remote add github https://github.com/ArSrNa/cnb-widget.git || \
+          git remote set-url github https://github.com/ArSrNa/cnb-widget.git
+        git push github "HEAD:refs/heads/${CNB_BRANCH}" --force
+        # 没有标签时 git push --tags 会空跑退出，不算失败
+        git push github --tags --force || test -z "$(git tag)"
+        echo "已同步 ${CNB_BRANCH} ($(git rev-parse --short HEAD)) 到 GitHub"
 
 .ci-stages: &ci-stages
   - name: 前端依赖安装
