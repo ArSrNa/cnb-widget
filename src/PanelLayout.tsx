@@ -1,12 +1,15 @@
-import type { CSSProperties } from "react";
+import { useState, type CSSProperties } from "react";
 import { Link, Outlet, useRouterState } from "@tanstack/react-router";
-import { Activity, ChevronRight, Gauge, House, Settings } from "lucide-react";
+import { openUrl } from "@tauri-apps/plugin-opener";
+import { Activity, ChevronRight, Download, Gauge, House, Settings } from "lucide-react";
 import { OrgAvatar } from "@/components/org-avatar";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Item, ItemContent, ItemDescription, ItemGroup, ItemMedia, ItemTitle } from "@/components/ui/item";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import {
   Sidebar, SidebarContent, SidebarFooter, SidebarGroup, SidebarGroupLabel,
   SidebarHeader, SidebarInset, SidebarMenu, SidebarMenuAction, SidebarMenuButton,
@@ -14,9 +17,13 @@ import {
   SidebarProvider, SidebarSeparator,
 } from "@/components/ui/sidebar";
 import { useCnb } from "@/hooks/use-cnb";
+import { useUpdate } from "@/hooks/use-update";
 
 export default function PanelLayout() {
   const { data, loading } = useCnb();
+  const { update } = useUpdate();
+  const [downloadError, setDownloadError] = useState<string | null>(null);
+  const downloadLink = update?.available ? update.link : null;
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const usageMatch = /^\/usage\/([^/]+)/.exec(pathname);
   const activeOrgSlug = usageMatch ? decodeURIComponent(usageMatch[1]) : null;
@@ -83,8 +90,31 @@ export default function PanelLayout() {
         </SidebarContent>
         <SidebarSeparator />
         <SidebarFooter className="gap-3 p-4">
-          <Badge variant="outline">{loading ? "同步中" : data.error ? "连接待配置" : data.updatedAt ? "真实用量" : "未连接"}</Badge>
-          <p className="text-xs text-muted-foreground">{data.orgs.length} 个组织 · CNB</p>
+          <div className="grid grid-cols-[minmax(0,1fr)_auto] items-end gap-2">
+            <div className="flex min-w-0 flex-col gap-2">
+              <Badge variant="outline" className="self-start">{loading ? "同步中" : data.error ? "连接待配置" : data.updatedAt ? "真实用量" : "未连接"}</Badge>
+              <p className="text-xs text-muted-foreground">{downloadError ?? `${data.orgs.length} 个组织 · CNB`}</p>
+            </div>
+            {downloadLink && update && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="outline"
+                    size="icon-sm"
+                    aria-label={`下载新版本 v${update.latestVersion}`}
+                    onClick={() => void openUrl(downloadLink).catch(() => setDownloadError("无法打开浏览器，请稍后重试"))}
+                  >
+                    <Download />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="top" align="end" className="max-w-56">
+                  <p>发现新版本 v{update.latestVersion}</p>
+                  {update.notes && <p className="text-muted-foreground">{update.notes}</p>}
+                  <p className="text-muted-foreground">点击前往下载</p>
+                </TooltipContent>
+              </Tooltip>
+            )}
+          </div>
         </SidebarFooter>
       </Sidebar>
       <SidebarInset className="min-h-0 min-w-0">

@@ -6,6 +6,7 @@ import NotchApp from "./NotchApp";
 import FloatApp from "./FloatApp";
 import FloatDetailsApp from "./FloatDetailsApp";
 import { CnbProvider } from "./hooks/use-cnb";
+import { UpdateProvider } from "./hooks/use-update";
 import { router } from "./router";
 import "./index.css";
 import "./App.css";
@@ -29,7 +30,9 @@ ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
   <React.StrictMode>
     <CnbProvider>
     {label === "main" ? (
-      <RouterProvider router={router} />
+      <UpdateProvider>
+        <RouterProvider router={router} />
+      </UpdateProvider>
     ) : label === "float" ? (
       <FloatApp />
     ) : label === "float-details" ? (

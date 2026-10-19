@@ -21,10 +21,13 @@ import SetupView from "@/SetupView";
 const UNAVAILABLE_MESSAGE = "无法获取用量，请检查权限和组织角色。";
 
 export default function HomePage() {
-  const { data, loading, refresh } = useCnb();
+  const { auth, data, loading, authError, refresh } = useCnb();
   const [connectionExpanded, setConnectionExpanded] = useState<boolean | null>(null);
   const connected = !!data.username && data.updatedAt !== null;
-  const connectionOpen = connectionExpanded ?? !connected;
+  const failed = !connected && (!!data.error || !!authError);
+  const detecting = !connected && loading && !failed;
+  const connectionOpen = connectionExpanded ?? !(connected || detecting);
+  const tokenSource = auth?.savedToken ? "应用保存的 Token" : auth?.environmentPresent ? "CNB_TOKEN 环境变量" : null;
 
   return <>
     <PageHeading title="首页" description="连接 CNB，查看真实组织用量。" media={<Avatar size="lg"><AvatarFallback><Gauge className="size-5" /></AvatarFallback></Avatar>} action={<Button variant="outline" disabled={loading} onClick={() => void refresh(true)}>{loading ? <Spinner data-icon="inline-start" /> : <RefreshCw data-icon="inline-start" />}刷新用量</Button>} />
@@ -32,7 +35,7 @@ export default function HomePage() {
       <Card>
         <CardHeader>
           <CardTitle>CNB 连接</CardTitle>
-          <CardDescription>{connected ? `已连接 @${data.username}` : "配置访问令牌，开始查看组织用量。"}</CardDescription>
+          <CardDescription>{connected ? `已连接 @${data.username}` : detecting ? <span className="inline-flex items-center gap-2"><Spinner className="size-3.5" />正在检测 CNB 连接{tokenSource ? ` · ${tokenSource}` : ""}…</span> : "配置访问令牌，开始查看组织用量。"}</CardDescription>
           <CardAction>
             <CollapsibleTrigger asChild>
               <Button variant="outline" size="sm" aria-label={connectionOpen ? "收起连接设置" : "展开连接设置"}>

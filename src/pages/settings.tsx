@@ -19,6 +19,7 @@ import { DEFAULT_SETTINGS, NOTCH_STATUSES, USAGE_DISPLAYS, USAGE_METRICS, type A
 import { selectedUsage } from "@/lib/usage";
 import { useCnb } from "@/hooks/use-cnb";
 import { TokenSettings } from "@/components/token-settings";
+import { UpdateSettings } from "@/components/update-settings";
 import SetupView from "@/SetupView";
 
 export default function SettingsPage() {
@@ -167,6 +168,7 @@ export default function SettingsPage() {
         </CardContent>
       </Card>
       <TokenSettings />
+      <UpdateSettings />
       <SetupView />
       {footerError && <Alert variant="destructive"><AlertCircle /><AlertTitle>无法打开网站</AlertTitle><AlertDescription>请在浏览器访问 https://www.arsrna.cn。</AlertDescription></Alert>}
       <footer className="flex items-center justify-center gap-1 text-sm text-muted-foreground">
