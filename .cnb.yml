@@ -13,6 +13,20 @@
     - /root/.bun:copy-on-write              # bun 依赖缓存
     - /usr/local/cargo:copy-on-write        # cargo registry 缓存
 
+.github-sync: &github-sync
+  name: sync-to-github
+  imports:
+    - https://cnb.cool/arsrna/env/-/blob/main/git.yaml
+  image: tencentcom/git-sync
+  settings:
+    target_url: https://github.com/ArSrNa/cnb-widget.git
+    auth_type: https
+    username: ${GIT_USERNAME}
+    password: ${GIT_ACCESS_TOKEN}
+    git_user: ${GIT_USERNAME}
+    git_email: ${GIT_EMAIL}
+    push_tags: true
+
 .ci-stages: &ci-stages
   - name: 前端依赖安装
     script: bun install --frozen-lockfile
@@ -31,11 +45,22 @@ main:
       runner: *ci-runner
       docker: *ci-docker
       stages: *ci-stages
+    - *github-sync
   pull_request:
     - name: build-and-check
       runner: *ci-runner
       docker: *ci-docker
       stages: *ci-stages
+  tag_push:
+    - *github-sync
+
+demo: # demo 分支与 main 保持镜像同步
+  push:
+    - name: build-and-check
+      runner: *ci-runner
+      docker: *ci-docker
+      stages: *ci-stages
+    - *github-sync
 
 v*: # 打 tag（如 v0.1.0）触发发布构建
   tag_push:
@@ -51,6 +76,16 @@ v*: # 打 tag（如 v0.1.0）触发发布构建
           script: cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings && cargo test --manifest-path src-tauri/Cargo.toml --workspace
         - name: Release 构建
           script: bun run tauri build
+
+# GitHub 镜像同步：用 tencentcom/git-sync 推送代码与标签
+# 密钥来自密钥仓库 arsrna/env 的 git.yaml（GIT_USERNAME / GIT_ACCESS_TOKEN / GIT_EMAIL），
+# 该文件需声明 allow_slugs: arsrna/cnb-widget 才允许本仓库流水线引用
+github-sync: # 手动触发：push 一次分支或修改一次该分支即可全量同步（含标签）
+  web_trigger:
+    - <<: *github-sync
+      branches: main
+    - <<: *github-sync
+      branches: demo
 
 $: # 云原生开发环境（WebIDE / VSCode 客户端）
   vscode:
