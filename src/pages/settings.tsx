@@ -119,7 +119,6 @@ export default function SettingsPage() {
                 disabled={disabled} value={usage.org?.slug ?? ""} onValueChange={(value) => { if (value) void update({ usageOrg: value }); }}>
                 {data.orgs.map((org) => <ToggleGroupItem key={org.slug} value={org.slug} disabled={org.chargeForbidden || !!org.error}>{org.name}{org.chargeForbidden && "（无权限）"}</ToggleGroupItem>)}
               </ToggleGroup>
-              <FieldDescription>只展示一个可读取组织的真实用量；连接 CNB 后可选择组织。</FieldDescription>
             </Field>
             <Field data-disabled={disabled}>
               <FieldLabel id="usage-metric-label">用量类型</FieldLabel>
@@ -130,7 +129,6 @@ export default function SettingsPage() {
                 }}>
                 {USAGE_METRICS.map((metric) => <ToggleGroupItem key={metric.key} value={metric.key}>{metric.label}</ToggleGroupItem>)}
               </ToggleGroup>
-              <FieldDescription>AI Credits 按 Credits、存储按 GiB、CPU/GPU 按核时统计。外圈与数字显示所选比例；无权限或暂无数据时显示 --。</FieldDescription>
             </Field>
             <Field data-disabled={disabled}>
               <FieldLabel id="usage-display-label">展示口径</FieldLabel>
@@ -141,7 +139,6 @@ export default function SettingsPage() {
                 }}>
                 {USAGE_DISPLAYS.map((display) => <ToggleGroupItem key={display.key} value={display.key}>{display.label}</ToggleGroupItem>)}
               </ToggleGroup>
-              <FieldDescription>默认显示剩余比例，即 100% 减去已用比例。设置同时应用到悬浮球、刘海和用量详情，重启后保留。</FieldDescription>
             </Field>
             <FieldSeparator />
             <Field data-disabled={disabled}>

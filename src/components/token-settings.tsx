@@ -82,7 +82,7 @@ export function TokenSettings() {
             {error && <FieldError>{error}</FieldError>}
           </Field>
           <Field orientation="horizontal" data-disabled={!desktop || busy}>
-            <FieldContent><FieldLabel htmlFor="token-persist">记住 Token</FieldLabel><FieldDescription>macOS 钥匙串 · Windows Credential Manager · Linux Secret Service。关闭后新 Token 仅在本次会话使用，重启后恢复已有凭据。</FieldDescription></FieldContent>
+            <FieldContent><FieldLabel htmlFor="token-persist">记住 Token</FieldLabel><FieldDescription>存储在系统凭据管理器。关闭后新 Token 仅在本次会话使用，重启后恢复已有凭据。</FieldDescription></FieldContent>
             <Switch id="token-persist" checked={persist} disabled={!desktop || busy} onCheckedChange={setPersist} />
           </Field>
         </FieldGroup>

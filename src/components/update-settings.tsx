@@ -25,17 +25,16 @@ export function UpdateSettings() {
       ? checking ? "正在比对发布接口…" : "尚未检查更新。"
       : update.available
         ? [
-            `发现新版本 v${latest}。`,
-            update.notes && `${update.notes}。`,
-            publishedAt && `发布于 ${publishedAt}。`,
-            !update.link && "发布接口未提供下载链接。",
-          ].filter(Boolean).join(" ")
+          `发现新版本 v${latest}。`,
+          update.notes && `${update.notes}。`,
+          publishedAt && `发布于 ${publishedAt}。`,
+          !update.link && "发布接口未提供下载链接。",
+        ].filter(Boolean).join(" ")
         : `当前已是最新版本，本机 v${update.currentVersion}，发布接口 v${latest}。`;
   return (
     <Card>
       <CardHeader>
         <CardTitle>检查更新</CardTitle>
-        <CardDescription>与发布接口的最新版本做 semver 比对，发现新版后前往下载页安装。</CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
         {!desktop && <Alert><AlertTitle>桌面预览</AlertTitle><AlertDescription>请在桌面应用中检查更新。</AlertDescription></Alert>}
